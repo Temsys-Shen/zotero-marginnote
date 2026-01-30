@@ -1,0 +1,56 @@
+lockfileVersion: '9.0'
+
+settings:
+  autoInstallPeers: true
+  excludeLinksFromLockfile: false
+
+importers:
+
+  .:
+    devDependencies:
+      marginnote:
+        specifier: '*'
+        version: 0.9.34
+      typescript:
+        specifier: ^5.5.0
+        version: 5.9.3
+
+packages:
+
+  lru-cache@6.0.0:
+    resolution: {integrity: sha512-Jo6dJ04CmSjuznwJSS3pUeWmd/H0ffTlkXXgwZi+eq1UCmqQwCh+eLsYOYCwY991i2Fah4h1BEMCx4qThGbsiA==}
+    engines: {node: '>=10'}
+
+  marginnote@0.9.34:
+    resolution: {integrity: sha512-lRr4AzB6pICNSC6ZlZamUAJRgWEHadZL5f3fm6poQHLCvczQrXl3gWeaUfMkyVSWWLo6PiaRaQ1IMOicQJiw7Q==}
+
+  semver@7.3.8:
+    resolution: {integrity: sha512-NB1ctGL5rlHrPJtFDVIVzTyQylMLu9N9VICA6HSFJo8MCGVTMW6gfpicwKmmK/dAjTOrqu5l63JJOpDSrAis3A==}
+    engines: {node: '>=10'}
+    hasBin: true
+
+  typescript@5.9.3:
+    resolution: {integrity: sha512-jl1vZzPDinLr9eUt3J/t7V6FgNEw9QjvBPdysz9KfQDD41fQrC2Y4vKQdiaUpFT4bXlb1RHhLpp8wtm6M5TgSw==}
+    engines: {node: '>=14.17'}
+    hasBin: true
+
+  yallist@4.0.0:
+    resolution: {integrity: sha512-3wdGidZyq5PB084XLES5TpOSRA3wjXAlIWMhum2kRcv/41Sn2emQ0dycQW4uZXLejwKvg6EsvbdlVL+FYEct7A==}
+
+snapshots:
+
+  lru-cache@6.0.0:
+    dependencies:
+      yallist: 4.0.0
+
+  marginnote@0.9.34:
+    dependencies:
+      semver: 7.3.8
+
+  semver@7.3.8:
+    dependencies:
+      lru-cache: 6.0.0
+
+  typescript@5.9.3: {}
+
+  yallist@4.0.0: {}

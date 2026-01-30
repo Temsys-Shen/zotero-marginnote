@@ -1,0 +1,24 @@
+{
+  "compilerOptions": {
+    "target": "ES2020",
+    "module": "ES2020",
+    "moduleResolution": "bundler",
+    "lib": ["ES2020"],
+    "strict": true,
+    "noImplicitAny": false,
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true,
+    "skipLibCheck": true,
+    "baseUrl": ".",
+    "outDir": "dist",
+    "declaration": true,
+    "declarationMap": true,
+    "importsNotUsedAsValues": "remove",
+    "preserveValueImports": false,
+    "allowJs": true,
+    "checkJs": true,
+    "typeRoots": ["types", "node_modules/@types"],
+    "types": ["marginnote"]
+  },
+  "include": ["src", "**/*.js", "types"]
+}
