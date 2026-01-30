@@ -1,94 +1,92 @@
-var ZoteroNetwork = {
+JSB.require('base64');
 
-  // 辅助：生成 NSURL
-  genURL: function (url) {
-    // 简单处理空格和协议头
-    url = url.trim();
-    if (url.indexOf('://') === -1) {
-      url = 'https://' + url;
+class Response {
+  constructor(data, nsResponse) {
+    this.data = data;
+    this.nsResponse = nsResponse;
+    this.status = nsResponse ? nsResponse.statusCode() : 0;
+  }
+
+  static isNil(obj) {
+    return obj === null || typeof obj === 'undefined' || obj instanceof NSNull;
+  }
+
+  text() {
+    if (Response.isNil(this.data) || this.data.length() === 0) return "";
+
+    var encoding = this.data.base64Encoding();
+    var decoding = Base64.decode(encoding);
+    return decoding;
+  }
+
+  json() {
+    if (Response.isNil(this.data) || this.data.length() === 0) return {};
+
+    try {
+      return NSJSONSerialization.JSONObjectWithDataOptions(this.data, 1);
+    } catch (e) {
+      return null;
     }
-    // 必须编码，否则含空格或特殊字符会崩溃
-    return NSURL.URLWithString(encodeURI(url));
-  },
+  }
+}
 
-  // 核心 fetch 方法
-  fetch: function (url, options) {
-    var self = this; // 闭包引用
-    options = options || {};
+class MNNetwork {
+  static isNil(obj) {
+    return obj === null || typeof obj === 'undefined' || obj instanceof NSNull;
+  }
+
+  static _initRequest(url, options) {
+    var fullUrl = url.trim();
+    if (fullUrl.indexOf("://") === -1) fullUrl = "https://" + fullUrl;
+
+    var request = NSMutableURLRequest.requestWithURL(NSURL.URLWithString(fullUrl));
+    request.setHTTPMethod(options.method || "GET");
+    request.setTimeoutInterval(options.timeout || 10);
+
+    var headers = {
+      "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 15_0 like Mac OS X)",
+      "Content-Type": "application/json",
+      "Accept": "application/json"
+    };
+    if (options.headers) {
+      for (var k in options.headers) headers[k] = options.headers[k];
+    }
+    request.setAllHTTPHeaderFields(headers);
+
+    if (options.json) {
+      request.setHTTPBody(NSJSONSerialization.dataWithJSONObjectOptions(options.json, 1));
+    } else if (options.body) {
+      request.setHTTPBody(NSData.dataWithStringEncoding(String(options.body), 4));
+    }
+
+    if (options.search) {
+      var components = NSURLComponents.componentsWithString(fullUrl);
+      var qs = Object.keys(options.search).map(function (k) {
+        return encodeURIComponent(k) + "=" + encodeURIComponent(options.search[k]);
+      }).join("&");
+      components.query = qs;
+      request.setURL(components.URL());
+    }
+
+    return request;
+  }
+
+  static fetch(url, options) {
+    var req = this._initRequest(url, options || {});
 
     return new Promise(function (resolve, reject) {
-      var request = NSMutableURLRequest.requestWithURL(self.genURL(url));
-
-      // 1. 设置 HTTP 方法
-      request.setHTTPMethod(options.method || 'GET');
-      request.setTimeoutInterval(options.timeout || 10.0);
-
-      // 2. 设置 Headers
-      var headers = {
-        'User-Agent': 'MarginNote-Zotero-Addon/1.0',
-        'Content-Type': 'application/json',
-        'Accept': 'application/json'
-      };
-
-      // 合并用户 headers
-      if (options.headers) {
-        for (var key in options.headers) {
-          headers[key] = options.headers[key];
-        }
-      }
-      request.setAllHTTPHeaderFields(headers);
-
-      // 3. 处理 Body (JSON 或 String)
-      if (options.body) {
-        var bodyStr = "";
-        if (typeof options.body === 'object') {
-          // NSJSONWritingSortedKeys = 1
-          var jsonData = NSJSONSerialization.dataWithJSONObjectOptions(options.body, 1);
-          request.setHTTPBody(jsonData);
-        } else {
-          bodyStr = String(options.body);
-          request.setHTTPBody(NSData.dataWithStringEncoding(bodyStr, 4)); // UTF8
-        }
-      }
-
-      // 4. 处理 Search Query (拼接到 URL)
-      if (options.search) {
-        var qs = [];
-        for (var k in options.search) {
-          qs.push(k + "=" + encodeURIComponent(options.search[k]));
-        }
-        if (qs.length > 0) {
-          var sep = (url.indexOf('?') === -1) ? '?' : '&';
-          request.setURL(self.genURL(url + sep + qs.join('&')));
-        }
-      }
-
-      // 5. 发送请求 (主线程队列)
       NSURLConnection.sendAsynchronousRequestQueueCompletionHandler(
-        request,
+        req,
         NSOperationQueue.mainQueue(),
-        function (response, data, error) {
-          if (error) {
-            reject(error.localizedDescription);
+        function (res, data, err) {
+          if (!MNNetwork.isNil(err)) {
+            reject(err.localizedDescription ? err.localizedDescription() : "Network Error");
           } else {
-            // 封装结果
-            resolve({
-              data: data,
-              // 辅助方法：转 JSON
-              json: function () {
-                if (!data || data.length() === 0) return {};
-                // NSJSONReadingMutableContainers = 1
-                return NSJSONSerialization.JSONObjectWithDataOptions(data, 1);
-              },
-              // 辅助方法：转 文本
-              text: function () {
-                if (!data) return "";
-                return NSString.alloc().initWithDataEncoding(data, 4);
-              }
-            });
+            var response = new Response(data, res);
+            resolve(response);
           }
         }
       );
     });
   }
-};
+}

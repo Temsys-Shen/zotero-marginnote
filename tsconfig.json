@@ -20,5 +20,6 @@
     "typeRoots": ["types", "node_modules/@types"],
     "types": ["marginnote"]
   },
-  "include": ["src", "**/*.js", "types"]
+  "include": ["src", "**/*.js", "types"],
+  "exclude": ["test/*.js"]
 }

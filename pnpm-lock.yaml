@@ -9,7 +9,7 @@ importers:
   .:
     devDependencies:
       marginnote:
-        specifier: '*'
+        specifier: ^0.9.34
         version: 0.9.34
       typescript:
         specifier: ^5.5.0

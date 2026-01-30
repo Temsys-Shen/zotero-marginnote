@@ -4,7 +4,7 @@
     "private": true,
     "scripts": {
         "check": "tsc --noEmit",
-        "build": "sh pack.sh"
+        "build": "cd src && zip -r -q ../zotero.mnaddon ."
     },
     "devDependencies": {
         "typescript": "^5.5.0",
