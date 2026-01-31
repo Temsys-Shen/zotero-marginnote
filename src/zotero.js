@@ -2,11 +2,8 @@ class ZoteroClient {
   constructor(config) {
     this.userId = config.userId || "0";
     this.apiKey = config.apiKey || "";
-    let rawBase = config.baseUrl || "https://api.zotero.org";
-    if (rawBase.endsWith("/")) {
-      rawBase = rawBase.substring(0, rawBase.length - 1);
-    }
-    this.baseUrl = rawBase;
+    this.local = config.local || false;
+    this.baseUrl = this.local ? "http://localhost:23119/api" : "https://api.zotero.org";
   }
   
   // 构建通用 Headers
@@ -37,10 +34,10 @@ class ZoteroClient {
   // --- 业务 API ---
   // 搜索条目
   async getItems(params) {
-    // 假设是 Web API 风格: /users/{id}/items
-    return this.request(`/users/${this.userId}/items`, {
+    const endpoint = `/users/${this.userId}/items`;
+    return this.request(endpoint, {
       method: 'GET',
-      search: params // {q: 'keyword', limit: 5}
+      search: params
     });
   }
   

@@ -1,2 +1,4 @@
 node_modules
 zotero.mnaddon
+.trae/**
+.cursor/**
