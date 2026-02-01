@@ -1,63 +1,76 @@
-JSB.newAddon = function(mainPath) {
-  JSB.require('network');
-  JSB.require('zotero');
-  JSB.require('zoteroPanel');
-
-  const newAddonClass = JSB.defineClass('ZoteroAddon : JSExtension', {
-    panelView: null,
-    tableView: null,
-    tableDelegate: null,
-    searchField: null,
-    zoteroItems: [],
-    filteredItems: [],
-    lastFetchTime: 0,
-
-    queryAddonCommandStatus() {
-      return {
-        image: 'logo.png', 
-        object: self, 
-        selector: 'onZoteroAction:', 
-        checked: false
-      };
+JSB.newAddon = function(mainPath){
+  JSB.require('WebViewController');
+  var newAddonClass = JSB.defineClass('SampleWAddon : JSExtension', /*Instance members*/{
+    //Window initialize
+    sceneWillConnect: function() {
+        self.layoutViewController = function(){
+          var frame = Application.sharedInstance().studyController(self.window).view.bounds;
+          var width = frame.width > 300?(300 + (frame.width - 300)/2):300;
+          self.webController.view.frame = {x:(frame.width-width)/2,y:frame.height - 500,width:width,height:480};
+        };
+        self.webController = WebViewController.new();
+        self.webController.mainPath = mainPath;
     },
-
-    async onZoteroAction(sender) {
-      if (self.panelView) {
-        closeZoteroPanel(self);
-        return;
+    //Window disconnect
+    sceneDidDisconnect: function() {
+    },
+    //Window resign active
+    sceneWillResignActive: function() {
+    },
+    //Window become active
+    sceneDidBecomeActive: function() {
+    },
+    notebookWillOpen: function(notebookid) {
+      NSTimer.scheduledTimerWithTimeInterval(0.2,false,function(){
+        var sample_on = NSUserDefaults.standardUserDefaults().objectForKey('marginnote_sample_w_on');
+        if(sample_on == true){// Not support in card deck mode
+          Application.sharedInstance().studyController(self.window).view.addSubview(self.webController.view);
+          self.layoutViewController();
+          Application.sharedInstance().studyController(self.window).refreshAddonCommands();
+        }
+      });
+    },
+    notebookWillClose: function(notebookid) {
+    },
+    documentDidOpen: function(docmd5) {
+    },
+    documentWillClose: function(docmd5) {
+    },
+    controllerWillLayoutSubviews: function(controller) {
+      //在这里添加窗口位置布局的代码
+      if(controller == Application.sharedInstance().studyController(self.window)){
+          self.layoutViewController();
       }
-
-      showZoteroPanel(self);
-      await loadZoteroItems(self);
     },
-
-    closeZoteroPanel(sender) {
-      closeZoteroPanel(self);
+    queryAddonCommandStatus: function() {
+      return {image:'logo.png',object:self,selector:'toggleSample:',checked:(self.webController.view.window?true:false)};
     },
-
-    refreshZoteroItems(sender) {
-      refreshZoteroItems(self);
+    toggleSample: function(sender) {
+      if(self.webController.view.window){
+        self.webController.view.removeFromSuperview();
+        NSUserDefaults.standardUserDefaults().setObjectForKey(false,'marginnote_sample_w_on');
+      }
+      else{
+        Application.sharedInstance().studyController(self.window).view.addSubview(self.webController.view);
+        self.layoutViewController();
+        NSUserDefaults.standardUserDefaults().setObjectForKey(true,'marginnote_sample_w_on');
+        NSTimer.scheduledTimerWithTimeInterval(0.2,false,function(){
+          Application.sharedInstance().studyController(self.window).becomeFirstResponder(); //For dismiss keyboard on iOS
+        });
+      }
+      Application.sharedInstance().studyController(self.window).refreshAddonCommands();
     },
-
-    textFieldShouldReturn(textField) {
-      return textFieldShouldReturn(self, textField);
+  }, /*Class members*/{
+    addonDidConnect: function() {
     },
-
-    textFieldDidChange(textField) {
-      textFieldDidChange(self, textField);
+    addonWillDisconnect: function() {
     },
-
-    sceneWillConnect() {},
-    sceneDidDisconnect() {},
-    notebookWillOpen(notebookid) {},
-    notebookWillClose(notebookid) {},
-    documentDidOpen(docmd5) {},
-    documentWillClose(docmd5) {}
-
-  }, {
-    addonDidConnect() {},
-    addonWillDisconnect() {}
+    applicationWillEnterForeground: function() {
+    },
+    applicationDidEnterBackground: function() {
+    },
+    applicationDidReceiveLocalNotification: function(notify) {
+    },
   });
-
   return newAddonClass;
 };

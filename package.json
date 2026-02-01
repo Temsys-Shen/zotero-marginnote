@@ -3,11 +3,8 @@
     "version": "0.0.0",
     "private": true,
     "scripts": {
-        "check": "tsc --noEmit",
         "build": "cd src && zip -r -q ../zotero.mnaddon ."
     },
     "devDependencies": {
-        "typescript": "^5.5.0",
-        "marginnote": "^0.9.34"
     }
 }
