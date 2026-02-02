@@ -1,4 +1,5 @@
 JSB.require('webpage');
+JSB.require('network');
 
 var WebViewController = JSB.defineClass('WebViewController : UIViewController <UIWebViewDelegate>', {
   viewDidLoad: function() {
@@ -45,8 +46,43 @@ var WebViewController = JSB.defineClass('WebViewController : UIViewController <U
     var errorString = WebPageConfig.errorHTMLTemplate.replace("%@", error.localizedDescription);
     self.webView.loadHTMLStringBaseURL(errorString, null);
   },
-  webViewShouldStartLoadWithRequestNavigationType: function(webView,request,type){
-    JSB.log('MNLOG %@',request);
+  webViewShouldStartLoadWithRequestNavigationType: function(webView, request, type) {
+    if (String(request.URL().scheme) !== 'mnzotero') return true;
+    var host = String(request.URL().host || '');
+    var path = String(request.URL().path || '');
+    if (host === 'fetch' || path.indexOf('fetch') !== -1) {
+        webView.evaluateJavaScript('window.__mnFetchPending', function(result) {
+          if (!result || result.length === 0) return;
+          var id = null;
+          try {
+            var pending = JSON.parse(result);
+            id = pending.id;
+            var reqUrl = pending.url;
+            var opts = pending.options || {};
+            var options = { method: opts.method || 'GET', headers: opts.headers || {} };
+            if (opts.body) options.body = opts.body;
+            if (opts.json) options.json = opts.json;
+            MNNetwork.fetch(reqUrl, options).then(function(res) {
+              var status = res.status;
+              var body = res.json ? res.json() : (res.text ? res.text() : null);
+              var ok = status >= 200 && status < 300;
+              var payload = JSON.stringify({ ok: ok, status: status, body: body });
+              webView.evaluateJavaScript("(function(){ var c = window.__mnFetchCb && window.__mnFetchCb['" + id + "']; if(c) c(null, " + payload + "); })();", null);
+            }, function(err) {
+              var msg = (err && (err.message || err.toString)) ? (err.message || err.toString()) : String(err);
+              var esc = (msg || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/\r/g, '').replace(/\n/g, '\\n');
+              webView.evaluateJavaScript("(function(){ var c = window.__mnFetchCb && window.__mnFetchCb['" + id + "']; if(c) c('" + esc + "', null); })();", null);
+            });
+          } catch (e) {
+            try { var p = JSON.parse(result); if (p && p.id) id = p.id; } catch (_) {}
+            var msg = (e && (e.message || e.toString)) ? (e.message || e.toString()) : String(e);
+            var esc = (msg || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/\r/g, '').replace(/\n/g, '\\n');
+            webView.evaluateJavaScript("(function(){ var c = window.__mnFetchCb && window.__mnFetchCb['" + (id || '') + "']; if(c) c('" + esc + "', null); })();", null);
+          }
+        });
+        return false;
+    }
+    JSB.log('MNLOG %@', request);
     return true;
   },
 

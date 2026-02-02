@@ -1,334 +1,484 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
+
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
-<title>Zotero Client</title>
-<style>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+  <title>Zotero Client</title>
+  <style>
     :root {
-        --bg: #F2F2F7;          /* 背景灰 */
-        --surface: #FFFFFF;     /* 表面白 */
-        --text: #1C1C1E;        /* 深黑 */
-        --sub: #8E8E93;         /* 次级灰 */
-        --accent: #007AFF;      /* 交互蓝 */
-        --accent-bg: #EBF5FF;   /* 浅蓝 */
-        --border: #E5E5EA;      /* 分割线 */
-        --green: #34C759;       /* 成功/PDF */
+      --bg: #F2F2F7;
+      /* 背景灰 */
+      --surface: #FFFFFF;
+      /* 表面白 */
+      --text: #1C1C1E;
+      /* 深黑 */
+      --sub: #8E8E93;
+      /* 次级灰 */
+      --accent: #007AFF;
+      /* 交互蓝 */
+      --accent-bg: #EBF5FF;
+      /* 浅蓝 */
+      --border: #E5E5EA;
+      /* 分割线 */
+      --green: #34C759;
+      /* 成功/PDF */
     }
 
     /* 1. 全屏重置 */
-    html, body {
-        margin: 0;
-        padding: 0;
-        width: 100%;
-        height: 100%;
-        font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
-        background-color: var(--bg);
-        color: var(--text);
-        overflow: hidden; /* 禁止 body 滚动，由内部容器接管 */
-        display: flex;
-        flex-direction: column;
+    html,
+    body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
+      background-color: var(--bg);
+      color: var(--text);
+      overflow: hidden;
+      /* 禁止 body 滚动，由内部容器接管 */
+      display: flex;
+      flex-direction: column;
     }
 
     /* 2. 顶部固定区域 */
     header {
-        background: var(--surface);
-        padding: 12px 16px;
-        border-bottom: 1px solid rgba(0,0,0,0.08);
-        box-shadow: 0 1px 3px rgba(0,0,0,0.03);
-        flex-shrink: 0; /* 防止被压缩 */
-        z-index: 10;
+      background: var(--surface);
+      padding: 12px 16px;
+      border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03);
+      flex-shrink: 0;
+      /* 防止被压缩 */
+      z-index: 10;
     }
 
     .top-row {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        margin-bottom: 12px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 12px;
     }
 
     h1 {
-        margin: 0;
-        font-size: 18px;
-        font-weight: 700;
-        display: flex;
-        align-items: center;
-        gap: 6px;
+      margin: 0;
+      font-size: 18px;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      gap: 6px;
     }
+
     h1::before {
-        content: '';
-        width: 4px; height: 16px;
-        background: var(--accent);
-        border-radius: 2px;
-        display: inline-block;
+      content: '';
+      width: 4px;
+      height: 16px;
+      background: var(--accent);
+      border-radius: 2px;
+      display: inline-block;
     }
 
     /* 配置折叠面板 */
     details {
-        font-size: 13px;
-        color: var(--sub);
+      font-size: 13px;
+      color: var(--sub);
     }
+
     summary {
-        list-style: none;
-        cursor: pointer;
-        user-select: none;
-        text-align: right;
+      list-style: none;
+      cursor: pointer;
+      user-select: none;
+      text-align: right;
     }
-    summary:hover { color: var(--accent); }
-    
+
+    summary:hover {
+      color: var(--accent);
+    }
+
     .config-panel {
-        background: var(--bg);
-        padding: 10px;
-        border-radius: 8px;
-        margin-top: 8px;
-        display: grid;
-        grid-template-columns: 1fr 1fr;
-        gap: 8px;
-        border: 1px solid var(--border);
+      background: var(--bg);
+      padding: 10px;
+      border-radius: 8px;
+      margin-top: 8px;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      border: 1px solid var(--border);
     }
 
     /* 输入控件 */
-    input, select {
-        width: 100%;
-        box-sizing: border-box;
-        padding: 8px 10px;
-        border: 1px solid transparent;
-        background: #fff;
-        border-radius: 6px;
-        font-size: 13px;
-        outline: none;
-        box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+    input,
+    select {
+      width: 100%;
+      box-sizing: border-box;
+      padding: 8px 10px;
+      border: 1px solid transparent;
+      background: #fff;
+      border-radius: 6px;
+      font-size: 13px;
+      outline: none;
+      box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
     }
-    input:focus, select:focus {
-        border-color: var(--accent);
+
+    input:focus,
+    select:focus {
+      border-color: var(--accent);
+    }
+
+    /* Local/Cloud mode toggle (replaces native select for WebView) */
+    .mode-options {
+      display: flex;
+      gap: 0;
+      grid-column: 1 / -1;
+    }
+
+    .mode-option {
+      flex: 1;
+      padding: 8px 10px;
+      border: 1px solid var(--border);
+      background: #fff;
+      border-radius: 6px;
+      font-size: 13px;
+      cursor: pointer;
+      text-align: center;
+      box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+    }
+
+    .mode-option:first-child {
+      border-radius: 6px 0 0 6px;
+      border-right-width: 0;
+    }
+
+    .mode-option:last-child {
+      border-radius: 0 6px 6px 0;
+    }
+
+    .mode-option.active {
+      background: var(--accent-bg);
+      color: var(--accent);
+      border-color: var(--accent);
+      font-weight: 600;
     }
 
     /* 搜索栏 */
     .search-bar {
-        position: relative;
-        display: flex;
-        gap: 8px;
+      position: relative;
+      display: flex;
+      gap: 8px;
     }
+
     #q {
-        background: #EFEFF4; /* iOS Search Bar Color */
-        border-radius: 10px;
-        padding: 10px 12px;
-        font-size: 15px;
-        box-shadow: none;
+      background: #EFEFF4;
+      /* iOS Search Bar Color */
+      border-radius: 10px;
+      padding: 10px 12px;
+      font-size: 15px;
+      box-shadow: none;
     }
-    #q:focus { background: #fff; border: 1px solid var(--accent); }
-    
+
+    #q:focus {
+      background: #fff;
+      border: 1px solid var(--accent);
+    }
+
     #btn {
-        background: var(--accent);
-        color: white;
-        border: none;
-        border-radius: 10px;
-        padding: 0 16px;
-        font-weight: 600;
-        cursor: pointer;
-        white-space: nowrap;
-        font-size: 14px;
+      background: var(--accent);
+      color: white;
+      border: none;
+      border-radius: 10px;
+      padding: 0 16px;
+      font-weight: 600;
+      cursor: pointer;
+      white-space: nowrap;
+      font-size: 14px;
     }
-    #btn:active { opacity: 0.7; }
+
+    #btn:active {
+      opacity: 0.7;
+    }
 
     /* 3. 滚动内容区域 */
     #content-area {
-        flex: 1;
-        overflow-y: auto;
-        -webkit-overflow-scrolling: touch; /* iOS顺滑滚动 */
-        padding: 16px;
-        display: flex;
-        flex-direction: column;
-        gap: 12px;
+      flex: 1;
+      overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
+      /* iOS顺滑滚动 */
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
     }
 
     /* 状态提示 */
     #log {
-        font-size: 13px;
-        color: var(--sub);
-        text-align: center;
-        padding: 10px 0;
+      font-size: 13px;
+      color: var(--sub);
+      text-align: center;
+      padding: 10px 0;
     }
 
-    /* 卡片样式 */
-    .card {
-        background: var(--surface);
-        border-radius: 12px;
-        padding: 16px;
-        box-shadow: 0 2px 6px rgba(0,0,0,0.04);
-        border: 1px solid rgba(0,0,0,0.02);
-        transition: transform 0.1s;
-        display: flex;
-        flex-direction: column;
-        gap: 8px;
+    /* 文献列表容器：整体圆角 */
+    .list-container {
+      background: var(--surface);
+      border-radius: 12px;
+      overflow: hidden;
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.04);
+      border: 1px solid rgba(0, 0, 0, 0.04);
     }
-    .card:active { background: #fafafa; }
 
-    .card-title {
-        font-size: 16px;
-        font-weight: 600;
-        line-height: 1.4;
-        color: var(--text);
+    /* 每一条：扁平，仅分割线 */
+    .list-item {
+      padding: 14px 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .list-item:last-child {
+      border-bottom: none;
+    }
+
+    .list-item:active {
+      background: #fafafa;
+    }
+
+    .list-title {
+      font-size: 16px;
+      font-weight: 600;
+      line-height: 1.4;
+      color: var(--text);
     }
 
     .meta-row {
-        display: flex;
-        align-items: center;
-        gap: 8px;
-        font-size: 12px;
-        color: var(--sub);
-        flex-wrap: wrap;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 12px;
+      color: var(--sub);
+      flex-wrap: wrap;
     }
+
     .tag {
-        background: #F0F0F5;
-        color: #666;
-        padding: 2px 6px;
-        border-radius: 4px;
-        font-size: 11px;
-        font-weight: 500;
+      background: #F0F0F5;
+      color: #666;
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-size: 11px;
+      font-weight: 500;
     }
 
     /* 按钮组 */
     .action-row {
-        margin-top: 4px;
-        display: flex;
-        gap: 8px;
-        flex-wrap: wrap;
+      margin-top: 4px;
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
     }
-    
-    .pill {
-        display: inline-flex;
-        align-items: center;
-        padding: 6px 12px;
-        border-radius: 100px; /* 胶囊圆角 */
-        font-size: 12px;
-        font-weight: 500;
-        text-decoration: none;
-        transition: opacity 0.2s;
-    }
-    .pill:hover { opacity: 0.8; }
-    
-    .pill-zotero { background: var(--accent-bg); color: var(--accent); }
-    .pill-web    { background: #F2F2F7; color: #666; }
-    .pill-pdf    { background: #E8F5E9; color: #2E7D32; } /* Green */
 
-</style>
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      padding: 6px 12px;
+      border-radius: 100px;
+      /* 胶囊圆角 */
+      font-size: 12px;
+      font-weight: 500;
+      text-decoration: none;
+      transition: opacity 0.2s;
+    }
+
+    .pill:hover {
+      opacity: 0.8;
+    }
+
+    .pill-zotero {
+      background: var(--accent-bg);
+      color: var(--accent);
+    }
+
+    .pill-web {
+      background: #F2F2F7;
+      color: #666;
+    }
+
+    .pill-pdf {
+      background: #E8F5E9;
+      color: #2E7D32;
+    }
+
+    /* Green */
+  </style>
 </head>
+
 <body>
 
-<header>
+  <header>
     <div class="top-row">
-        <h1>Zotero Linker</h1>
-        <details>
-            <summary>⚙️ Settings</summary>
-            <div class="config-panel">
-                <select id="mode" onchange="upd()">
-                    <option value="L">Local API</option>
-                    <option value="C">Cloud API</option>
-                </select>
-                <input id="uid" placeholder="UserID (Local: 0)" value="0">
-                <input id="slug" placeholder="Username (Slug)">
-                <input id="key" type="password" placeholder="API Key" style="display:none">
-            </div>
-        </details>
+      <h1>Zotero Linker</h1>
+      <details id="settings-details">
+        <summary>⚙️ Settings</summary>
+        <div class="config-panel">
+          <input type="hidden" id="mode" value="L">
+          <div class="mode-options">
+            <span class="mode-option active" data-value="L" role="button">Local API</span>
+            <span class="mode-option" data-value="C" role="button">Cloud API</span>
+          </div>
+          <input id="uid" placeholder="UserID" style="display:none">
+          <input id="slug" placeholder="Username" style="display:none">
+          <input id="key" type="password" placeholder="API Key" style="display:none">
+        </div>
+      </details>
     </div>
 
     <div class="search-bar">
-        <input id="q" placeholder="Keywords (Title, Author, Year)..." onkeydown="event.key=='Enter'&&run()">
-        <button id="btn" onclick="run()">Search</button>
+      <input id="q" placeholder="Keywords (Title, Author, Year)..." onkeydown="event.key=='Enter'&&run()">
+      <button id="btn" onclick="run()">Search</button>
     </div>
-</header>
+  </header>
 
-<div id="content-area">
+  <div id="content-area">
     <div id="log">Ready to search.</div>
     <div id="out"></div>
-</div>
+  </div>
 
-<script>
-const $ = i => document.getElementById(i);
-const API = { L: 'http://localhost:23119/api/users', C: 'https://api.zotero.org/users' };
+  <script>
+    const $ = i => document.getElementById(i);
+    const API = { L: 'http://localhost:23119/api/users', C: 'https://api.zotero.org/users' };
 
-function upd() {
-    const isC = $('mode').value === 'C';
-    $('key').style.display = isC ? 'block' : 'none';
-    $('uid').value = isC ? '' : '0';
-}
+    function upd() {
+      const isC = $('mode').value === 'C';
+      $('key').style.display = isC ? 'block' : 'none';
+      $('uid').style.display = isC ? 'block' : 'none';
+      $('slug').style.display = isC ? 'block' : 'none';
+      if (!isC) {
+        $('uid').value = '0';
+      }
+    }
 
-async function run() {
-    const q = $('q').value.trim();
-    if(!q) return;
-    
-    const [mode, uid, slug, key] = ['mode','uid','slug','key'].map(i => $(i).value);
-    const ui = { btn: $('btn'), log: $('log'), out: $('out') };
-    
-    ui.btn.disabled = true;
-    ui.out.innerHTML = '';
-    ui.log.style.display = 'block';
-    ui.log.innerText = 'Searching...';
+    (function initModeOptions() {
+      var opts = document.querySelectorAll('.mode-option');
+      var modeInput = $('mode');
+      opts.forEach(function (o) {
+        if (o.getAttribute('data-value') === modeInput.value) o.classList.add('active');
+        else o.classList.remove('active');
+      });
+      opts.forEach(function (el) {
+        el.addEventListener('click', function () {
+          var v = this.getAttribute('data-value');
+          modeInput.value = v;
+          opts.forEach(function (o) { o.classList.remove('active'); });
+          this.classList.add('active');
+          upd();
+        });
+      });
+      upd();
+    })();
 
-    try {
-        const headers = { 'Zotero-API-Version': 3 };
-        if(mode === 'C' && key) headers['Zotero-API-Key'] = key;
-        const base = `${API[mode]}/${uid}`;
+    function localFetch(url, options) {
+      return new Promise(function (resolve, reject) {
+        var id = 'req_' + Date.now() + '_' + Math.random().toString(36).slice(2);
+        window.__mnFetchCb = window.__mnFetchCb || {};
+        window.__mnFetchCb[id] = function (err, data) {
+          try { delete window.__mnFetchCb[id]; } catch (e) { }
+          if (err) reject(new Error(err));
+          else resolve({
+            ok: data && data.ok,
+            status: data && data.status,
+            json: function () { return Promise.resolve(data && data.body != null ? data.body : {}); }
+          });
+        };
+        window.__mnFetchPending = JSON.stringify({ id: id, url: url, options: options || {} });
+        var iframe = document.createElement('iframe');
+        iframe.style.display = 'none';
+        iframe.src = 'mnzotero://fetch';
+        document.body.appendChild(iframe);
+        setTimeout(function () { try { iframe.remove(); } catch (e) { } }, 500);
+      });
+    }
 
+    async function run() {
+      const q = $('q').value.trim();
+      if (!q) return;
+
+      const [mode, uid, slug, key] = ['mode', 'uid', 'slug', 'key'].map(i => $(i).value);
+      const ui = { btn: $('btn'), log: $('log'), out: $('out') };
+
+      ui.btn.disabled = true;
+      ui.out.innerHTML = '';
+      ui.log.style.display = 'block';
+      ui.log.innerText = 'Searching...';
+
+      var headers = { 'Zotero-API-Version': 3 };
+      if (mode === 'C' && key) headers['Zotero-API-Key'] = key;
+      const base = `${API[mode]}/${uid}`;
+      const doFetch = mode === 'L' ? localFetch : function (url, opts) { return fetch(url, opts); };
+
+      try {
         // 1. Fetch
-        const r1 = await fetch(`${base}/items?q=${encodeURIComponent(q)}&limit=25`, { headers });
-        if(!r1.ok) throw new Error("Connection Failed");
-        
+        const r1 = await doFetch(`${base}/items?q=${encodeURIComponent(q)}&limit=25`, { headers: headers });
+        if (!r1.ok) throw new Error("Connection Failed");
+
         // 2. Filter
-        const items = (await r1.json()).filter(i => !['attachment','note'].includes(i.data.itemType)).slice(0, 15);
-        
-        if(!items.length) { ui.log.innerText = 'No matches found.'; return; }
+        const items = (await r1.json()).filter(i => !['attachment', 'note'].includes(i.data.itemType)).slice(0, 15);
+
+        if (!items.length) { ui.log.innerText = 'No matches found.'; return; }
         ui.log.innerText = `Fetching attachments for ${items.length} items...`;
 
-        // 3. Parallel Enrichment
-        const cards = await Promise.all(items.map(async ({data: d}) => {
-            let pdf = null;
+        // 3. Enrichment: Local = serial (one __mnFetchPending at a time), Cloud = parallel
+        var cards;
+        if (mode === 'L') {
+          cards = [];
+          for (var i = 0; i < items.length; i++) {
+            var d = items[i].data;
+            var pdf = null;
             try {
-                const r2 = await fetch(`${base}/items/${d.key}/children`, { headers });
-                if(r2.ok) {
-                    const kids = await r2.json();
-                    const p = kids.find(k => k.data.itemType==='attachment' && (k.data.contentType==='application/pdf' || (k.data.filename||'').endsWith('.pdf')));
-                    if(p) pdf = p.data.key;
-                }
-            } catch(e){}
-            
-            const u = slug || 'user';
-            const lItem = `zotero://select/library/items/${d.key}`;
-            const cItem = `https://www.zotero.org/${u}/items/${d.key}`;
-            
-            let btns = `
-                <a href="${lItem}" class="pill pill-zotero">Zotero Item</a>
-                <a href="${cItem}" target="_blank" class="pill pill-web">Web</a>
-            `;
-            
-            if(pdf) {
-                const lPdf = `zotero://open-pdf/library/items/${pdf}`;
-                const cPdf = `https://www.zotero.org/${u}/items/${d.key}/attachment/${pdf}/reader`;
-                btns += `
-                    <a href="${lPdf}" class="pill pill-pdf">Local PDF</a>
-                    <a href="${cPdf}" target="_blank" class="pill pill-web">Cloud PDF</a>
-                `;
+              var r2 = await doFetch(base + '/items/' + d.key + '/children', { headers: headers });
+              if (r2.ok) {
+                var kids = await r2.json();
+                var p = kids.find(function (k) { return k.data.itemType === 'attachment' && (k.data.contentType === 'application/pdf' || (k.data.filename || '').endsWith('.pdf')); });
+                if (p) pdf = p.data.key;
+              }
+            } catch (e) { }
+            var lItem = 'zotero://select/library/items/' + d.key;
+            var btns = '<a href="' + lItem + '" class="pill pill-zotero">Zotero Item</a>';
+            if (pdf) {
+              var lPdf = 'zotero://open-pdf/library/items/' + pdf;
+              btns += '<a href="' + lPdf + '" class="pill pill-pdf">Local PDF</a>';
             }
+            cards.push('<div class="list-item"><div class="list-title">' + (d.title || 'Untitled') + '</div><div class="meta-row"><span class="tag">' + d.itemType + '</span><span>' + (d.creators && d.creators[0] && d.creators[0].lastName || 'Unknown') + '</span><span>' + (d.date || '') + '</span></div><div class="action-row">' + btns + '</div></div>');
+          }
+        } else {
+          cards = await Promise.all(items.map(async function (item) {
+            var d = item.data;
+            var pdf = null;
+            try {
+              var r2 = await doFetch(base + '/items/' + d.key + '/children', { headers: headers });
+              if (r2.ok) {
+                var kids = await r2.json();
+                var p = kids.find(function (k) { return k.data.itemType === 'attachment' && (k.data.contentType === 'application/pdf' || (k.data.filename || '').endsWith('.pdf')); });
+                if (p) pdf = p.data.key;
+              }
+            } catch (e) { }
+            var u = slug || 'user';
+            var lItem = 'zotero://select/library/items/' + d.key;
+            var cItem = 'https://www.zotero.org/' + u + '/items/' + d.key;
+            var btns = '<a href="' + lItem + '" class="pill pill-zotero">Zotero Item</a><a href="' + cItem + '" target="_blank" class="pill pill-web">Web</a>';
+            if (pdf) {
+              var lPdf = 'zotero://open-pdf/library/items/' + pdf;
+              var cPdf = 'https://www.zotero.org/' + u + '/items/' + d.key + '/attachment/' + pdf + '/reader';
+              btns += '<a href="' + lPdf + '" class="pill pill-pdf">Local PDF</a><a href="' + cPdf + '" target="_blank" class="pill pill-web">Cloud PDF</a>';
+            }
+            return '<div class="list-item"><div class="list-title">' + (d.title || 'Untitled') + '</div><div class="meta-row"><span class="tag">' + d.itemType + '</span><span>' + (d.creators && d.creators[0] && d.creators[0].lastName || 'Unknown') + '</span><span>' + (d.date || '') + '</span></div><div class="action-row">' + btns + '</div></div>';
+          }));
+        }
 
-            return `
-            <div class="card">
-                <div class="card-title">${d.title || 'Untitled'}</div>
-                <div class="meta-row">
-                    <span class="tag">${d.itemType}</span>
-                    <span>${d.creators?.[0]?.lastName || 'Unknown'}</span>
-                    <span>${d.date || ''}</span>
-                </div>
-                <div class="action-row">${btns}</div>
-            </div>`;
-        }));
-
-        ui.out.innerHTML = cards.join('');
+        ui.out.innerHTML = '<div class="list-container">' + cards.join('') + '</div>';
         ui.log.style.display = 'none'; // Hide log on success
-        
-    } catch(e) { ui.log.innerText = 'Error: ' + e.message; }
-    finally { ui.btn.disabled = false; }
-}
-</script>
+
+      } catch (e) { ui.log.innerText = 'Error: ' + e.message; }
+      finally { ui.btn.disabled = false; }
+    }
+  </script>
 </body>
+
 </html>
