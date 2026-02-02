@@ -25,6 +25,19 @@
       /* 成功/PDF */
     }
 
+    /* 全局禁止选择，仅允许输入框 */
+    * {
+      -webkit-user-select: none;
+      user-select: none;
+      -webkit-touch-callout: none;
+    }
+
+    input, textarea {
+      -webkit-user-select: text;
+      user-select: text;
+      -webkit-touch-callout: default;
+    }
+
     /* 1. 全屏重置 */
     html,
     body {

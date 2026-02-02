@@ -4,6 +4,18 @@ JSB.newAddon = function(mainPath){
     //Window initialize
     sceneWillConnect: function() {
         self.layoutViewController = function(){
+          var savedConfig = NSUserDefaults.standardUserDefaults().objectForKey('mn_zotero_frame_config');
+          if (savedConfig) {
+             var x = savedConfig.x;
+             var y = savedConfig.y;
+             var w = savedConfig.width;
+             var h = savedConfig.height;
+             if (x !== undefined && y !== undefined && w !== undefined && h !== undefined) {
+                 self.webController.view.frame = {x: x, y: y, width: w, height: h};
+                 return;
+             }
+          }
+
           var frame = Application.sharedInstance().studyController(self.window).view.bounds;
           var width = frame.width > 300?(300 + (frame.width - 300)/2):300;
           self.webController.view.frame = {x:(frame.width-width)/2,y:frame.height - 500,width:width,height:480};
@@ -37,9 +49,12 @@ JSB.newAddon = function(mainPath){
     documentWillClose: function(docmd5) {
     },
     controllerWillLayoutSubviews: function(controller) {
-      //在这里添加窗口位置布局的代码
+      // 只有当 webController 还没有 frame 时才初始化布局
+      // 避免每次旋转或触发布局更新时强制重置位置，干扰用户的拖拽操作
       if(controller == Application.sharedInstance().studyController(self.window)){
-          self.layoutViewController();
+          if (!self.webController || !self.webController.view || self.webController.view.frame.width === 0) {
+              self.layoutViewController();
+          }
       }
     },
     queryAddonCommandStatus: function() {

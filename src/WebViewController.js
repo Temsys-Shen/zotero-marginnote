@@ -2,19 +2,86 @@ JSB.require('network');
 
 var SZWebViewController = JSB.defineClass('SZWebViewController : UIViewController <UIWebViewDelegate>', {
   viewDidLoad: function() {
+    // 1. View Setup
     self.navigationItem.title = 'Web';
     self.view.backgroundColor = UIColor.whiteColor();
-    self.view.layer.shadowOffset = {width:0,height:0};
-    self.view.layer.shadowRadius = 10;
-    self.view.layer.shadowOpacity = 0.5;
-    self.view.layer.shadowColor = UIColor.colorWithWhiteAlpha(0.5,1);
+    self.view.layer.cornerRadius = 6;
+    self.view.layer.masksToBounds = false;
+    self.view.layer.shadowOffset = {width:0,height:2};
+    self.view.layer.shadowRadius = 4;
+    self.view.layer.shadowOpacity = 0.3;
+    self.view.layer.shadowColor = UIColor.blackColor();
 
-    self.webView = new UIWebView(self.view.bounds);
+    var titleHeight = 32;
+
+    // 2. Title Bar
+    self.titleBar = new UIView({x: 0, y: 0, width: self.view.bounds.width, height: titleHeight});
+    self.titleBar.backgroundColor = UIColor.colorWithWhiteAlpha(0.96, 1);
+    self.titleBar.autoresizingMask = (1 << 1); // FlexibleWidth
+
+    
+    // Mask top corners
+    /* 暂注释掉圆角遮罩以排查闪退问题
+    var maskPath = UIBezierPath.bezierPathWithRoundedRectByRoundingCornersCornerRadii(
+        self.titleBar.bounds, 
+        (1 << 0 | 1 << 1), // TopLeft | TopRight
+        {width: 6, height: 6}
+    );
+    var maskLayer = CAShapeLayer.layer();
+    maskLayer.frame = self.titleBar.bounds;
+    try {
+      maskLayer.path = maskPath.CGPath; // Try property access first
+    } catch (e) {
+      JSB.log('MNZotero: maskPath.CGPath property access failed: ' + e);
+      try {
+        maskLayer.path = maskPath.CGPath(); // Try method call
+      } catch (e2) {
+        JSB.log('MNZotero: maskPath.CGPath() method call failed: ' + e2);
+      }
+    }
+    self.titleBar.layer.mask = maskLayer;
+    */
+    
+    // Add Label
+    self.titleLabel = new UILabel({x: 10, y: 0, width: self.view.bounds.width - 20, height: titleHeight});
+    self.titleLabel.text = "Zotero Reference";
+    self.titleLabel.textAlignment = 1; // Center
+    self.titleLabel.font = UIFont.boldSystemFontOfSize(14);
+    self.titleLabel.textColor = UIColor.darkGrayColor();
+    self.titleLabel.autoresizingMask = (1 << 1); // FlexibleWidth
+    self.titleBar.addSubview(self.titleLabel);
+
+    // Pan Gesture for Title Bar
+    var panRecognizer = new UIPanGestureRecognizer(self, "handlePan:");
+    self.titleBar.addGestureRecognizer(panRecognizer);
+    self.view.addSubview(self.titleBar);
+
+    // 3. WebView
+    self.webView = new UIWebView({x: 0, y: titleHeight, width: self.view.bounds.width, height: self.view.bounds.height - titleHeight});
     self.webView.backgroundColor = UIColor.whiteColor();
     self.webView.scalesPageToFit = true;
-    self.webView.autoresizingMask = (1 << 1 | 1 << 4 | 1 << 5);
+    self.webView.autoresizingMask = (1 << 1 | 1 << 4); // FlexibleWidth | FlexibleHeight
     self.webView.delegate = self;
     self.view.addSubview(self.webView);
+
+    // 4. Resize Handle
+    var resizeSize = 40;
+    self.resizeHandle = new UIView({x: self.view.bounds.width - resizeSize, y: self.view.bounds.height - resizeSize, width: resizeSize, height: resizeSize});
+    self.resizeHandle.backgroundColor = UIColor.clearColor(); // 调试时可改为红色观察
+    self.resizeHandle.autoresizingMask = (1 << 0 | 1 << 3); // FlexibleLeftMargin | FlexibleTopMargin
+    self.resizeHandle.userInteractionEnabled = true; 
+
+    
+    var resizeIcon = new UILabel({x: 15, y: 15, width: 20, height: 20});
+    resizeIcon.text = "↘";
+    resizeIcon.font = UIFont.systemFontOfSize(16);
+    resizeIcon.textColor = UIColor.grayColor();
+    resizeIcon.alpha = 0.5;
+    self.resizeHandle.addSubview(resizeIcon);
+
+    var resizeRecognizer = new UIPanGestureRecognizer(self, "handleResize:");
+    self.resizeHandle.addGestureRecognizer(resizeRecognizer);
+    self.view.addSubview(self.resizeHandle);
 
     var htmlPath = self.mainPath ? (self.mainPath + '/webpage.html') : null;
     if (htmlPath) {
@@ -24,6 +91,81 @@ var SZWebViewController = JSB.defineClass('SZWebViewController : UIViewControlle
       self.webView.loadHTMLStringBaseURL('<html><body style="margin:20px;">未找到 mainPath，无法加载 webpage.html</body></html>', null);
     }
   },
+  
+  handlePan: function(recognizer) {
+    var translation = recognizer.translationInView(self.view.superview);
+    var center = self.view.center;
+    self.view.center = {x: center.x + translation.x, y: center.y + translation.y};
+    recognizer.setTranslationInView({x: 0, y: 0}, self.view.superview);
+    
+    if (recognizer.state == 3) { // Ended
+        // Inline save logic
+        var frame = self.view.frame;
+        var config = {
+            x: frame.x,
+            y: frame.y,
+            width: frame.width,
+            height: frame.height
+        };
+        NSUserDefaults.standardUserDefaults().setObjectForKey(config, 'mn_zotero_frame_config');
+    }
+  },
+
+  handleResize: function(recognizer) {
+    var location = recognizer.locationInView(self.view.superview); // Get absolute location in superview
+    if (recognizer.state == 1) { // Began
+        // Store initial touch position and initial frame
+        self._resizeStartLocation = location;
+        self._resizeStartFrame = self.view.frame;
+    } else if (recognizer.state == 2) { // Changed
+        if (!self._resizeStartLocation || !self._resizeStartFrame) return;
+        
+        var dx = location.x - self._resizeStartLocation.x;
+        var dy = location.y - self._resizeStartLocation.y;
+        
+        var newWidth = Math.max(250, self._resizeStartFrame.width + dx);
+        var newHeight = Math.max(300, self._resizeStartFrame.height + dy);
+        
+        // Use bounds for debugging
+        JSB.log("MNZotero: Resize new frame: " + JSON.stringify({width: newWidth, height: newHeight}));
+
+        self.view.frame = {
+            x: self._resizeStartFrame.x,
+            y: self._resizeStartFrame.y,
+            width: newWidth,
+            height: newHeight
+        };
+        
+        // Force layout update if needed
+        self.view.setNeedsLayout();
+        
+    } else if (recognizer.state == 3) { // Ended
+        // self.saveFrameState(); // JSB 实例方法调用可能存在绑定问题，改为直接在这里执行保存逻辑
+        var frame = self.view.frame;
+        var config = {
+            x: frame.x,
+            y: frame.y,
+            width: frame.width,
+            height: frame.height
+        };
+        NSUserDefaults.standardUserDefaults().setObjectForKey(config, 'mn_zotero_frame_config');
+
+        self._resizeStartLocation = null;
+        self._resizeStartFrame = null;
+    }
+  },
+
+  saveFrameState: function() {
+      var frame = self.view.frame;
+      var config = {
+          x: frame.x,
+          y: frame.y,
+          width: frame.width,
+          height: frame.height
+      };
+      NSUserDefaults.standardUserDefaults().setObjectForKey(config, 'mn_zotero_frame_config');
+  },
+
   viewWillAppear: function(animated) {
     self.webView.delegate = self;
   },
