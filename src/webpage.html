@@ -390,6 +390,20 @@
     (function initModeOptions() {
       var opts = document.querySelectorAll('.mode-option');
       var modeInput = $('mode');
+      
+      // Load saved values
+      ['uid', 'slug', 'key', 'mode'].forEach(id => {
+        const val = localStorage.getItem('zotero_' + id);
+        if (val) $(id).value = val;
+      });
+
+      // Save changes automatically
+      ['uid', 'slug', 'key'].forEach(id => {
+        $(id).addEventListener('input', function() {
+          localStorage.setItem('zotero_' + id, this.value);
+        });
+      });
+
       opts.forEach(function (o) {
         if (o.getAttribute('data-value') === modeInput.value) o.classList.add('active');
         else o.classList.remove('active');
@@ -398,6 +412,7 @@
         el.addEventListener('click', function () {
           var v = this.getAttribute('data-value');
           modeInput.value = v;
+          localStorage.setItem('zotero_mode', v); // Save mode change
           opts.forEach(function (o) { o.classList.remove('active'); });
           this.classList.add('active');
           upd();
@@ -430,7 +445,8 @@
 
     async function run() {
       const q = $('q').value.trim();
-      if (!q) return;
+      // Allow empty search to list all items
+      // if (!q) return; 
 
       let [mode, uid, slug, key] = ['mode', 'uid', 'slug', 'key'].map(i => $(i).value);
       // Local mode always uses '0' as userID internally
@@ -450,11 +466,16 @@
 
       try {
         // 1. Fetch
-        const r1 = await doFetch(`${base}/items?q=${encodeURIComponent(q)}&limit=25`, { headers: headers });
+        // If q is empty, don't use ?q= parameter
+        // Remove limit restriction (Zotero default limit is usually 25, we can set it higher or remove it to use default)
+        // Note: Zotero API limit max is 100. To get ALL, we need pagination, but for "unlimited" single request we can try max limit.
+        const queryParam = q ? `?q=${encodeURIComponent(q)}&limit=100` : `?limit=100`;
+        const r1 = await doFetch(`${base}/items${queryParam}`, { headers: headers });
         if (!r1.ok) throw new Error("Connection Failed");
 
         // 2. Filter
-        const items = (await r1.json()).filter(i => !['attachment', 'note'].includes(i.data.itemType)).slice(0, 15);
+        // Removed .slice(0, 15) to show all fetched items
+        const items = (await r1.json()).filter(i => !['attachment', 'note'].includes(i.data.itemType));
 
         if (!items.length) { ui.log.innerText = 'No matches found.'; return; }
         ui.log.innerText = `Fetching attachments for ${items.length} items...`;

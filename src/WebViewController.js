@@ -5,12 +5,19 @@ var SZWebViewController = JSB.defineClass('SZWebViewController : UIViewControlle
     // 1. View Setup
     self.navigationItem.title = 'Web';
     self.view.backgroundColor = UIColor.whiteColor();
-    self.view.layer.cornerRadius = 6;
-    self.view.layer.masksToBounds = false;
-    self.view.layer.shadowOffset = {width:0,height:2};
-    self.view.layer.shadowRadius = 4;
-    self.view.layer.shadowOpacity = 0.3;
-    self.view.layer.shadowColor = UIColor.blackColor();
+    self.view.layer.cornerRadius = 10; // Standard corner radius
+    self.view.layer.masksToBounds = true; // Clip content to rounded corners
+    self.view.layer.borderWidth = 0.5; // Optional: add thin border for better visibility
+    self.view.layer.borderColor = UIColor.lightGrayColor().colorWithAlphaComponent(0.3);
+    /* 
+    Shadow requires masksToBounds = false, but cornerRadius requires masksToBounds = true for content clipping.
+    To have both, we usually need a container view. For simplicity here, we prioritize corner radius over shadow on the main view.
+    MarginNote's native popovers usually handle shadows externally or we accept no shadow for now.
+    */
+    // self.view.layer.shadowOffset = {width:0,height:2};
+    // self.view.layer.shadowRadius = 4;
+    // self.view.layer.shadowOpacity = 0.3;
+    // self.view.layer.shadowColor = UIColor.blackColor();
 
     var titleHeight = 32;
 
@@ -18,6 +25,7 @@ var SZWebViewController = JSB.defineClass('SZWebViewController : UIViewControlle
     self.titleBar = new UIView({x: 0, y: 0, width: self.view.bounds.width, height: titleHeight});
     self.titleBar.backgroundColor = UIColor.colorWithWhiteAlpha(0.96, 1);
     self.titleBar.autoresizingMask = (1 << 1); // FlexibleWidth
+
 
     
     // Mask top corners
@@ -27,20 +35,14 @@ var SZWebViewController = JSB.defineClass('SZWebViewController : UIViewControlle
         (1 << 0 | 1 << 1), // TopLeft | TopRight
         {width: 6, height: 6}
     );
-    var maskLayer = CAShapeLayer.layer();
-    maskLayer.frame = self.titleBar.bounds;
-    try {
-      maskLayer.path = maskPath.CGPath; // Try property access first
-    } catch (e) {
-      JSB.log('MNZotero: maskPath.CGPath property access failed: ' + e);
-      try {
-        maskLayer.path = maskPath.CGPath(); // Try method call
-      } catch (e2) {
-        JSB.log('MNZotero: maskPath.CGPath() method call failed: ' + e2);
-      }
-    }
+    // ...
     self.titleBar.layer.mask = maskLayer;
     */
+   
+    // Since we clipped the main view (self.view) with cornerRadius, 
+    // we don't strictly need to mask the title bar separately if it's at the top.
+    // The parent's clip will handle the top corners.
+
     
     // Add Label
     self.titleLabel = new UILabel({x: 10, y: 0, width: self.view.bounds.width - 20, height: titleHeight});
