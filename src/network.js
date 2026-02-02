@@ -1,6 +1,6 @@
 JSB.require('base64');
 
-class Response {
+class SZResponse {
   constructor(data, nsResponse) {
     this.data = data;
     this.nsResponse = nsResponse;
@@ -12,15 +12,15 @@ class Response {
   }
 
   text() {
-    if (Response.isNil(this.data) || this.data.length() === 0) return "";
+    if (SZResponse.isNil(this.data) || this.data.length() === 0) return "";
 
     var encoding = this.data.base64Encoding();
-    var decoding = Base64.decode(encoding);
+    var decoding = SZBase64.decode(encoding);
     return decoding;
   }
 
   json() {
-    if (Response.isNil(this.data) || this.data.length() === 0) return {};
+    if (SZResponse.isNil(this.data) || this.data.length() === 0) return {};
 
     try {
       return NSJSONSerialization.JSONObjectWithDataOptions(this.data, 1);
@@ -30,7 +30,7 @@ class Response {
   }
 }
 
-class MNNetwork {
+class SZMNNetwork {
   static isNil(obj) {
     return obj === null || typeof obj === 'undefined' || obj instanceof NSNull;
   }
@@ -79,10 +79,10 @@ class MNNetwork {
         req,
         NSOperationQueue.mainQueue(),
         function (res, data, err) {
-          if (!MNNetwork.isNil(err)) {
+          if (!SZMNNetwork.isNil(err)) {
             reject(err.localizedDescription ? err.localizedDescription() : "Network Error");
           } else {
-            var response = new Response(data, res);
+            var response = new SZResponse(data, res);
             resolve(response);
           }
         }

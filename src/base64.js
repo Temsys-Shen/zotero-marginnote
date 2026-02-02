@@ -1,7 +1,7 @@
 // base64.js
 // Base64 解码工具函数
 
-var Base64 = {
+var SZBase64 = {
     _keyStr: "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=",
 
     decode: function(input) {

@@ -1,6 +1,6 @@
 JSB.require('network');
 
-var WebViewController = JSB.defineClass('WebViewController : UIViewController <UIWebViewDelegate>', {
+var SZWebViewController = JSB.defineClass('SZWebViewController : UIViewController <UIWebViewDelegate>', {
   viewDidLoad: function() {
     self.navigationItem.title = 'Web';
     self.view.backgroundColor = UIColor.whiteColor();
@@ -57,18 +57,14 @@ var WebViewController = JSB.defineClass('WebViewController : UIViewController <U
     try { urlString = url.absoluteString(); } catch (e) { urlString = url.absoluteString; }
     urlString = String(urlString || '');
 
-    console.log('MNZotero Debug: type=' + type + ', scheme=' + scheme + ', url=' + urlString);
-
     // 1. 拦截 zotero 协议
     if (scheme === 'zotero' || urlString.indexOf('zotero:') === 0) {
-      console.log('MNZotero: Intercepting zotero link');
       Application.sharedInstance().openURL(url);
       return false;
     }
 
     // 2. 拦截 http/https 协议（Web/Cloud PDF），强制在 Safari 打开
     if (scheme === 'http' || scheme === 'https') {
-      console.log('MNZotero: Intercepting web link -> Safari');
       Application.sharedInstance().openURL(url);
       return false;
     }
@@ -89,7 +85,7 @@ var WebViewController = JSB.defineClass('WebViewController : UIViewController <U
             var options = { method: opts.method || 'GET', headers: opts.headers || {} };
             if (opts.body) options.body = opts.body;
             if (opts.json) options.json = opts.json;
-            MNNetwork.fetch(reqUrl, options).then(function(res) {
+            SZMNNetwork.fetch(reqUrl, options).then(function(res) {
               var status = res.status;
               var body = res.json ? res.json() : (res.text ? res.text() : null);
               var ok = status >= 200 && status < 300;

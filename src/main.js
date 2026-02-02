@@ -1,6 +1,6 @@
 JSB.newAddon = function(mainPath){
   JSB.require('WebViewController');
-  var newAddonClass = JSB.defineClass('SampleWAddon : JSExtension', /*Instance members*/{
+  var newAddonClass = JSB.defineClass('SZSampleWAddon : JSExtension', /*Instance members*/{
     //Window initialize
     sceneWillConnect: function() {
         self.layoutViewController = function(){
@@ -8,7 +8,7 @@ JSB.newAddon = function(mainPath){
           var width = frame.width > 300?(300 + (frame.width - 300)/2):300;
           self.webController.view.frame = {x:(frame.width-width)/2,y:frame.height - 500,width:width,height:480};
         };
-        self.webController = WebViewController.new();
+        self.webController = SZWebViewController.new();
         self.webController.mainPath = mainPath;
     },
     //Window disconnect
