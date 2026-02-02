@@ -4,48 +4,39 @@ var SZWebViewController = JSB.defineClass('SZWebViewController : UIViewControlle
   viewDidLoad: function() {
     // 1. View Setup
     self.navigationItem.title = 'Web';
-    self.view.backgroundColor = UIColor.whiteColor();
-    self.view.layer.cornerRadius = 10; // Standard corner radius
-    self.view.layer.masksToBounds = true; // Clip content to rounded corners
-    self.view.layer.borderWidth = 0.5; // Optional: add thin border for better visibility
-    self.view.layer.borderColor = UIColor.lightGrayColor().colorWithAlphaComponent(0.3);
-    /* 
-    Shadow requires masksToBounds = false, but cornerRadius requires masksToBounds = true for content clipping.
-    To have both, we usually need a container view. For simplicity here, we prioritize corner radius over shadow on the main view.
-    MarginNote's native popovers usually handle shadows externally or we accept no shadow for now.
-    */
-    // self.view.layer.shadowOffset = {width:0,height:2};
-    // self.view.layer.shadowRadius = 4;
-    // self.view.layer.shadowOpacity = 0.3;
-    // self.view.layer.shadowColor = UIColor.blackColor();
+    
+    // Root view: Clear background + Shadow + NO masking
+    self.view.backgroundColor = UIColor.clearColor();
+    self.view.layer.shadowOffset = {width:0,height:2};
+    self.view.layer.shadowRadius = 4;
+    self.view.layer.shadowOpacity = 0.3;
+    self.view.layer.shadowColor = UIColor.blackColor();
+    self.view.layer.masksToBounds = false;
+
+    // Defend against zero frame initialization
+    var bounds = self.view.bounds;
+    var initWidth = bounds.width > 0 ? bounds.width : 300;
+    var initHeight = bounds.height > 0 ? bounds.height : 400;
+
+    // Container view (renamed to containerView to avoid potential conflict)
+    self.containerView = new UIView({x: 0, y: 0, width: initWidth, height: initHeight});
+    self.containerView.backgroundColor = UIColor.whiteColor();
+    self.containerView.layer.cornerRadius = 10; 
+    self.containerView.layer.masksToBounds = true; // Clip content
+    self.containerView.layer.borderWidth = 0.5;
+    self.containerView.layer.borderColor = UIColor.lightGrayColor().colorWithAlphaComponent(0.3);
+    self.containerView.autoresizingMask = (1 << 1 | 1 << 4); // FlexibleWidth | FlexibleHeight
+    self.view.addSubview(self.containerView);
 
     var titleHeight = 32;
 
     // 2. Title Bar
-    self.titleBar = new UIView({x: 0, y: 0, width: self.view.bounds.width, height: titleHeight});
+    self.titleBar = new UIView({x: 0, y: 0, width: initWidth, height: titleHeight});
     self.titleBar.backgroundColor = UIColor.colorWithWhiteAlpha(0.96, 1);
     self.titleBar.autoresizingMask = (1 << 1); // FlexibleWidth
-
-
-    
-    // Mask top corners
-    /* 暂注释掉圆角遮罩以排查闪退问题
-    var maskPath = UIBezierPath.bezierPathWithRoundedRectByRoundingCornersCornerRadii(
-        self.titleBar.bounds, 
-        (1 << 0 | 1 << 1), // TopLeft | TopRight
-        {width: 6, height: 6}
-    );
-    // ...
-    self.titleBar.layer.mask = maskLayer;
-    */
-   
-    // Since we clipped the main view (self.view) with cornerRadius, 
-    // we don't strictly need to mask the title bar separately if it's at the top.
-    // The parent's clip will handle the top corners.
-
     
     // Add Label
-    self.titleLabel = new UILabel({x: 10, y: 0, width: self.view.bounds.width - 20, height: titleHeight});
+    self.titleLabel = new UILabel({x: 10, y: 0, width: initWidth - 20, height: titleHeight});
     self.titleLabel.text = "Zotero Reference";
     self.titleLabel.textAlignment = 1; // Center
     self.titleLabel.font = UIFont.boldSystemFontOfSize(14);
@@ -56,23 +47,27 @@ var SZWebViewController = JSB.defineClass('SZWebViewController : UIViewControlle
     // Pan Gesture for Title Bar
     var panRecognizer = new UIPanGestureRecognizer(self, "handlePan:");
     self.titleBar.addGestureRecognizer(panRecognizer);
-    self.view.addSubview(self.titleBar);
+    self.containerView.addSubview(self.titleBar);
 
     // 3. WebView
-    self.webView = new UIWebView({x: 0, y: titleHeight, width: self.view.bounds.width, height: self.view.bounds.height - titleHeight});
+    self.webView = new UIWebView({
+        x: 0, 
+        y: titleHeight, 
+        width: initWidth, 
+        height: Math.max(0, initHeight - titleHeight)
+    });
     self.webView.backgroundColor = UIColor.whiteColor();
     self.webView.scalesPageToFit = true;
     self.webView.autoresizingMask = (1 << 1 | 1 << 4); // FlexibleWidth | FlexibleHeight
     self.webView.delegate = self;
-    self.view.addSubview(self.webView);
+    self.containerView.addSubview(self.webView);
 
     // 4. Resize Handle
     var resizeSize = 40;
-    self.resizeHandle = new UIView({x: self.view.bounds.width - resizeSize, y: self.view.bounds.height - resizeSize, width: resizeSize, height: resizeSize});
-    self.resizeHandle.backgroundColor = UIColor.clearColor(); // 调试时可改为红色观察
+    self.resizeHandle = new UIView({x: initWidth - resizeSize, y: initHeight - resizeSize, width: resizeSize, height: resizeSize});
+    self.resizeHandle.backgroundColor = UIColor.clearColor(); 
     self.resizeHandle.autoresizingMask = (1 << 0 | 1 << 3); // FlexibleLeftMargin | FlexibleTopMargin
     self.resizeHandle.userInteractionEnabled = true; 
-
     
     var resizeIcon = new UILabel({x: 15, y: 15, width: 20, height: 20});
     resizeIcon.text = "↘";
@@ -83,7 +78,7 @@ var SZWebViewController = JSB.defineClass('SZWebViewController : UIViewControlle
 
     var resizeRecognizer = new UIPanGestureRecognizer(self, "handleResize:");
     self.resizeHandle.addGestureRecognizer(resizeRecognizer);
-    self.view.addSubview(self.resizeHandle);
+    self.containerView.addSubview(self.resizeHandle);
 
     var htmlPath = self.mainPath ? (self.mainPath + '/webpage.html') : null;
     if (htmlPath) {
