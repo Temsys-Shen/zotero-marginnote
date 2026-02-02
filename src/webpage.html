@@ -81,6 +81,7 @@
     details {
       font-size: 13px;
       color: var(--sub);
+      position: relative; /* Anchor for floating panel */
     }
 
     summary {
@@ -94,15 +95,23 @@
       color: var(--accent);
     }
 
+    /* Floating Config Panel */
     .config-panel {
-      background: var(--bg);
-      padding: 10px;
-      border-radius: 8px;
+      position: absolute;
+      top: 100%;
+      right: 0;
+      width: 260px;
       margin-top: 8px;
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 8px;
-      border: 1px solid var(--border);
+      padding: 16px;
+      background: rgba(255, 255, 255, 0.98);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border-radius: 12px;
+      box-shadow: 0 12px 32px rgba(0, 0, 0, 0.12), 0 0 0 1px rgba(0,0,0,0.05);
+      z-index: 1000;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
     }
 
     /* 输入控件 */
@@ -110,53 +119,66 @@
     select {
       width: 100%;
       box-sizing: border-box;
-      padding: 8px 10px;
-      border: 1px solid transparent;
-      background: #fff;
-      border-radius: 6px;
+      padding: 10px 12px;
+      border: none;
+      background: #EFEFF4; /* iOS input gray */
+      border-radius: 8px;
       font-size: 13px;
       outline: none;
-      box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+      color: #000;
+      box-shadow: none;
     }
 
     input:focus,
     select:focus {
-      border-color: var(--accent);
+      background: #fff;
+      box-shadow: 0 0 0 2px var(--accent);
     }
 
-    /* Local/Cloud mode toggle (replaces native select for WebView) */
+    /* Local/Cloud mode toggle (Redesigned: iOS Segmented Control) */
     .mode-options {
       display: flex;
-      gap: 0;
-      grid-column: 1 / -1;
+      background-color: #7676801f;
+      padding: 2px;
+      border-radius: 8px;
+      margin-bottom: 4px; /* Space before inputs */
     }
 
     .mode-option {
       flex: 1;
-      padding: 8px 10px;
-      border: 1px solid var(--border);
-      background: #fff;
-      border-radius: 6px;
+      padding: 6px 4px;
       font-size: 13px;
-      cursor: pointer;
+      font-weight: 500;
+      color: var(--text);
       text-align: center;
-      box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+      cursor: pointer;
+      border-radius: 6px;
+      border: 1px solid transparent;
+      background: transparent;
+      transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+      user-select: none;
+      -webkit-user-select: none;
+      white-space: nowrap; /* Prevent text wrapping */
+      overflow: hidden;
+      text-overflow: ellipsis;
     }
 
-    .mode-option:first-child {
-      border-radius: 6px 0 0 6px;
-      border-right-width: 0;
-    }
-
+    .mode-option:first-child,
     .mode-option:last-child {
-      border-radius: 0 6px 6px 0;
+      border-radius: 6px;
+      border: 1px solid transparent;
     }
 
     .mode-option.active {
-      background: var(--accent-bg);
-      color: var(--accent);
-      border-color: var(--accent);
+      background: #FFFFFF;
+      color: #000;
       font-weight: 600;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12), 0 0.5px 1px rgba(0, 0, 0, 0.04);
+      border: 0.5px solid rgba(0, 0, 0, 0.04);
+    }
+
+    .mode-option:not(.active):hover {
+      background: rgba(255, 255, 255, 0.4);
     }
 
     /* 搜索栏 */

@@ -1,4 +1,3 @@
-JSB.require('webpage');
 JSB.require('network');
 
 var WebViewController = JSB.defineClass('WebViewController : UIViewController <UIWebViewDelegate>', {
@@ -43,8 +42,8 @@ var WebViewController = JSB.defineClass('WebViewController : UIViewController <U
   webViewDidFailLoadWithError: function(webView, error) {
     UIApplication.sharedApplication().networkActivityIndicatorVisible = false;
 
-    var errorString = WebPageConfig.errorHTMLTemplate.replace("%@", error.localizedDescription);
-    self.webView.loadHTMLStringBaseURL(errorString, null);
+    var errorHTML = "<html><body style='margin:20px; font-family: -apple-system; color: #666;'><h3>加载失败</h3><p>" + (error.localizedDescription || '').replace(/</g, '&lt;').replace(/>/g, '&gt;') + "</p></body></html>";
+    self.webView.loadHTMLStringBaseURL(errorHTML, null);
   },
   webViewShouldStartLoadWithRequestNavigationType: function(webView, request, type) {
     if (String(request.URL().scheme) !== 'mnzotero') return true;
