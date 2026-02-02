@@ -46,8 +46,36 @@ var WebViewController = JSB.defineClass('WebViewController : UIViewController <U
     self.webView.loadHTMLStringBaseURL(errorHTML, null);
   },
   webViewShouldStartLoadWithRequestNavigationType: function(webView, request, type) {
-    if (String(request.URL().scheme) !== 'mnzotero') return true;
-    var host = String(request.URL().host || '');
+    var url = request.URL();
+    
+    // JSBox/JSB 中 OC 对象的属性访问兼容性处理
+    var scheme = '';
+    try { scheme = url.scheme(); } catch (e) { scheme = url.scheme; }
+    scheme = String(scheme || '').toLowerCase();
+
+    var urlString = '';
+    try { urlString = url.absoluteString(); } catch (e) { urlString = url.absoluteString; }
+    urlString = String(urlString || '');
+
+    console.log('MNZotero Debug: type=' + type + ', scheme=' + scheme + ', url=' + urlString);
+
+    // 1. 拦截 zotero 协议
+    if (scheme === 'zotero' || urlString.indexOf('zotero:') === 0) {
+      console.log('MNZotero: Intercepting zotero link');
+      Application.sharedInstance().openURL(url);
+      return false;
+    }
+
+    // 2. 拦截 http/https 协议（Web/Cloud PDF），强制在 Safari 打开
+    if (scheme === 'http' || scheme === 'https') {
+      console.log('MNZotero: Intercepting web link -> Safari');
+      Application.sharedInstance().openURL(url);
+      return false;
+    }
+
+    // 3. 处理 mnzotero 内部协议
+    if (scheme !== 'mnzotero') return true;
+    var host = String(url.host || '');
     var path = String(request.URL().path || '');
     if (host === 'fetch' || path.indexOf('fetch') !== -1) {
         webView.evaluateJavaScript('window.__mnFetchPending', function(result) {
