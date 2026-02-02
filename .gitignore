@@ -1,4 +1,4 @@
 node_modules
-zotero.mnaddon
+*.mnaddon
 .trae/**
 .cursor/**

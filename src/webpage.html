@@ -477,6 +477,20 @@
       });
     }
 
+    function buildCreateNoteUrl(title, type, year, author, linkZotero, linkPdf, linkWeb, linkCloudPdf) {
+      var q = [
+        'title=' + encodeURIComponent(title),
+        'type=' + encodeURIComponent(type || ''),
+        'year=' + encodeURIComponent(year || ''),
+        'author=' + encodeURIComponent(author || ''),
+        'lZ=' + encodeURIComponent(linkZotero || '')
+      ];
+      if (linkPdf) q.push('lP=' + encodeURIComponent(linkPdf));
+      if (linkWeb) q.push('lW=' + encodeURIComponent(linkWeb));
+      if (linkCloudPdf) q.push('lC=' + encodeURIComponent(linkCloudPdf));
+      return 'mnzotero://createNote?' + q.join('&');
+    }
+
     async function run() {
       const q = $('q').value.trim();
       // Allow empty search to list all items
@@ -536,8 +550,10 @@
               btns += '<a href="' + lPdf + '" class="pill pill-pdf">Local PDF</a>';
             }
             var addTitle = (d.title || 'Untitled').replace(/"/g, '&quot;');
-            var createNoteUrl = 'mnzotero://createNote?title=' + encodeURIComponent(d.title || 'Untitled');
-            cards.push('<div class="list-item"><div class="list-item-body"><div class="list-title">' + addTitle + '</div><div class="meta-row"><span class="tag">' + d.itemType + '</span><span>' + (d.creators && d.creators[0] && d.creators[0].lastName || 'Unknown') + '</span><span>' + (d.date || '') + '</span></div><div class="action-row">' + btns + '</div></div><a href="' + createNoteUrl + '" class="add-to-mn-btn" title="在当前位置创建卡片">+</a></div>');
+            var year = (d.date || '').substring(0, 4) || '';
+            var author = (d.creators && d.creators[0] && d.creators[0].lastName) || 'Unknown';
+            var createNoteUrl = buildCreateNoteUrl(d.title || 'Untitled', d.itemType, year, author, lItem, pdf ? ('zotero://open-pdf/library/items/' + pdf) : '', '', '');
+            cards.push('<div class="list-item"><div class="list-item-body"><div class="list-title">' + addTitle + '</div><div class="meta-row"><span class="tag">' + d.itemType + '</span><span>' + author + '</span><span>' + (d.date || '') + '</span></div><div class="action-row">' + btns + '</div></div><a href="' + createNoteUrl + '" class="add-to-mn-btn" title="在当前位置创建卡片">+</a></div>');
           }
         } else {
           cards = await Promise.all(items.map(async function (item) {
@@ -561,8 +577,10 @@
               btns += '<a href="' + lPdf + '" class="pill pill-pdf">Local PDF</a><a href="' + cPdf + '" target="_blank" class="pill pill-web">Cloud PDF</a>';
             }
             var addTitle = (d.title || 'Untitled').replace(/"/g, '&quot;');
-            var createNoteUrl = 'mnzotero://createNote?title=' + encodeURIComponent(d.title || 'Untitled');
-            return '<div class="list-item"><div class="list-item-body"><div class="list-title">' + addTitle + '</div><div class="meta-row"><span class="tag">' + d.itemType + '</span><span>' + (d.creators && d.creators[0] && d.creators[0].lastName || 'Unknown') + '</span><span>' + (d.date || '') + '</span></div><div class="action-row">' + btns + '</div></div><a href="' + createNoteUrl + '" class="add-to-mn-btn" title="在当前位置创建卡片">+</a></div>';
+            var year = (d.date || '').substring(0, 4) || '';
+            var author = (d.creators && d.creators[0] && d.creators[0].lastName) || 'Unknown';
+            var createNoteUrl = buildCreateNoteUrl(d.title || 'Untitled', d.itemType, year, author, lItem, pdf ? lPdf : '', cItem, pdf ? cPdf : '');
+            return '<div class="list-item"><div class="list-item-body"><div class="list-title">' + addTitle + '</div><div class="meta-row"><span class="tag">' + d.itemType + '</span><span>' + author + '</span><span>' + (d.date || '') + '</span></div><div class="action-row">' + btns + '</div></div><a href="' + createNoteUrl + '" class="add-to-mn-btn" title="在当前位置创建卡片">+</a></div>';
           }));
         }
 

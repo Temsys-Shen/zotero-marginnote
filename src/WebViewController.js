@@ -123,8 +123,7 @@ var SZWebViewController = JSB.defineClass('SZWebViewController : UIViewControlle
         var newWidth = Math.max(250, self._resizeStartFrame.width + dx);
         var newHeight = Math.max(300, self._resizeStartFrame.height + dy);
         
-        // Use bounds for debugging
-        console.log("MNZotero: Resize new frame: " + JSON.stringify({width: newWidth, height: newHeight}));
+
 
         self.view.frame = {
             x: self._resizeStartFrame.x,
@@ -224,15 +223,22 @@ var SZWebViewController = JSB.defineClass('SZWebViewController : UIViewControlle
       } catch (e) {
         if (urlStringForQuery.indexOf('?') !== -1) queryString = urlStringForQuery.split('?')[1] || '';
       }
-      var title = '';
+      var title = '', type = '', year = '', author = '', lZ = '', lP = '', lW = '', lC = '';
       if (queryString) {
         var parts = queryString.split('&');
         for (var i = 0; i < parts.length; i++) {
           var eq = parts[i].indexOf('=');
-          if (eq !== -1 && decodeURIComponent(parts[i].substring(0, eq)) === 'title') {
-            title = decodeURIComponent(parts[i].substring(eq + 1).replace(/\+/g, ' '));
-            break;
-          }
+          if (eq === -1) continue;
+          var key = decodeURIComponent(parts[i].substring(0, eq));
+          var val = decodeURIComponent(parts[i].substring(eq + 1).replace(/\+/g, ' '));
+          if (key === 'title') title = val;
+          else if (key === 'type') type = val;
+          else if (key === 'year') year = val;
+          else if (key === 'author') author = val;
+          else if (key === 'lZ') lZ = val;
+          else if (key === 'lP') lP = val;
+          else if (key === 'lW') lW = val;
+          else if (key === 'lC') lC = val;
         }
       }
       if (!title) return false;
@@ -271,7 +277,36 @@ var SZWebViewController = JSB.defineClass('SZWebViewController : UIViewControlle
         topicId,
         function() {
           try {
-            newNote = Note.createWithTitleNotebookDocument(title, notebook, doc);
+            var createdNote = Note.createWithTitleNotebookDocument(title, notebook, doc);
+            newNote = createdNote;
+            if (!createdNote) return;
+            var hasMeta = (type || year || author);
+            var hasLinks = (lZ || lP || lW || lC);
+            if (!hasMeta && !hasLinks) return;
+            var esc = function(s) {
+              if (!s) return '';
+              return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+            };
+            var body = '<div style="font-family:sans-serif;padding:20px 28px;background:#FAFAFA;border-left:6px solid #007AFF;border-radius:6px;margin:14px 0;">';
+            if (hasMeta) {
+              body += '<div style="margin-bottom:12px;">';
+              var yearAuthor = [year, author].filter(Boolean).join(' ');
+              if (yearAuthor) body += '<span style="font-size:32px;font-weight:bold;color:#333;margin-right:12px;">' + esc(yearAuthor) + '</span>';
+              if (type) body += '<span style="color:#999;font-size:22px;border:1px solid #ddd;padding:4px 14px;border-radius:12px;vertical-align:text-bottom;">' + esc(type) + '</span>';
+              body += '</div>';
+            }
+            if (hasLinks) {
+              body += '<div style="display:flex;gap:24px;">';
+              if (lZ) body += '<a href="' + lZ + '" style="text-decoration:none;color:#007AFF;font-weight:600;font-size:24px;">🔗 Open in Zotero</a>';
+              if (lP) body += '<a href="' + lP + '" style="text-decoration:none;color:#2E7D32;font-weight:600;font-size:24px;">📑 Read PDF</a>';
+              if (lW) body += '<a href="' + lW + '" style="text-decoration:none;color:#666;font-weight:600;font-size:24px;">🌐 Web</a>';
+              if (lC) body += '<a href="' + lC + '" style="text-decoration:none;color:#666;font-weight:600;font-size:24px;">📑 Cloud PDF</a>';
+              body += '</div>';
+            }
+            body += '</div>';
+            try {
+              if (createdNote.appendMarkdownComment) createdNote.appendMarkdownComment(body);
+            } catch (e) { }
           } catch (e) { }
         }
       );
@@ -314,7 +349,6 @@ var SZWebViewController = JSB.defineClass('SZWebViewController : UIViewControlle
         });
         return false;
     }
-    console.log('MNLOG %@', request);
     return true;
   },
 
