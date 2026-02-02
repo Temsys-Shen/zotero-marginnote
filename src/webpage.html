@@ -260,12 +260,13 @@
       border: 1px solid rgba(0, 0, 0, 0.04);
     }
 
-    /* 每一条：扁平，仅分割线 */
+    /* 每一条：横向 flex，左侧内容 + 右侧 + 按钮 */
     .list-item {
       padding: 14px 16px;
       display: flex;
-      flex-direction: column;
-      gap: 6px;
+      flex-direction: row;
+      align-items: center;
+      gap: 12px;
       border-bottom: 1px solid var(--border);
     }
 
@@ -275,6 +276,39 @@
 
     .list-item:active {
       background: #fafafa;
+    }
+
+    .list-item-body {
+      flex: 1;
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .add-to-mn-btn {
+      flex-shrink: 0;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 36px;
+      height: 36px;
+      border-radius: 10px;
+      background: var(--accent-bg);
+      color: var(--accent);
+      font-size: 20px;
+      font-weight: 300;
+      line-height: 1;
+      text-decoration: none;
+      transition: opacity 0.2s;
+    }
+
+    .add-to-mn-btn:hover {
+      opacity: 0.9;
+    }
+
+    .add-to-mn-btn:active {
+      opacity: 0.7;
     }
 
     .list-title {
@@ -501,7 +535,9 @@
               var lPdf = 'zotero://open-pdf/library/items/' + pdf;
               btns += '<a href="' + lPdf + '" class="pill pill-pdf">Local PDF</a>';
             }
-            cards.push('<div class="list-item"><div class="list-title">' + (d.title || 'Untitled') + '</div><div class="meta-row"><span class="tag">' + d.itemType + '</span><span>' + (d.creators && d.creators[0] && d.creators[0].lastName || 'Unknown') + '</span><span>' + (d.date || '') + '</span></div><div class="action-row">' + btns + '</div></div>');
+            var addTitle = (d.title || 'Untitled').replace(/"/g, '&quot;');
+            var createNoteUrl = 'mnzotero://createNote?title=' + encodeURIComponent(d.title || 'Untitled');
+            cards.push('<div class="list-item"><div class="list-item-body"><div class="list-title">' + addTitle + '</div><div class="meta-row"><span class="tag">' + d.itemType + '</span><span>' + (d.creators && d.creators[0] && d.creators[0].lastName || 'Unknown') + '</span><span>' + (d.date || '') + '</span></div><div class="action-row">' + btns + '</div></div><a href="' + createNoteUrl + '" class="add-to-mn-btn" title="在当前位置创建卡片">+</a></div>');
           }
         } else {
           cards = await Promise.all(items.map(async function (item) {
@@ -524,7 +560,9 @@
               var cPdf = 'https://www.zotero.org/' + u + '/items/' + d.key + '/attachment/' + pdf + '/reader';
               btns += '<a href="' + lPdf + '" class="pill pill-pdf">Local PDF</a><a href="' + cPdf + '" target="_blank" class="pill pill-web">Cloud PDF</a>';
             }
-            return '<div class="list-item"><div class="list-title">' + (d.title || 'Untitled') + '</div><div class="meta-row"><span class="tag">' + d.itemType + '</span><span>' + (d.creators && d.creators[0] && d.creators[0].lastName || 'Unknown') + '</span><span>' + (d.date || '') + '</span></div><div class="action-row">' + btns + '</div></div>';
+            var addTitle = (d.title || 'Untitled').replace(/"/g, '&quot;');
+            var createNoteUrl = 'mnzotero://createNote?title=' + encodeURIComponent(d.title || 'Untitled');
+            return '<div class="list-item"><div class="list-item-body"><div class="list-title">' + addTitle + '</div><div class="meta-row"><span class="tag">' + d.itemType + '</span><span>' + (d.creators && d.creators[0] && d.creators[0].lastName || 'Unknown') + '</span><span>' + (d.date || '') + '</span></div><div class="action-row">' + btns + '</div></div><a href="' + createNoteUrl + '" class="add-to-mn-btn" title="在当前位置创建卡片">+</a></div>';
           }));
         }
 

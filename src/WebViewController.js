@@ -37,7 +37,7 @@ var SZWebViewController = JSB.defineClass('SZWebViewController : UIViewControlle
     
     // Add Label
     self.titleLabel = new UILabel({x: 10, y: 0, width: initWidth - 20, height: titleHeight});
-    self.titleLabel.text = "Zotero Reference";
+    self.titleLabel.text = "Zotero Connector";
     self.titleLabel.textAlignment = 1; // Center
     self.titleLabel.font = UIFont.boldSystemFontOfSize(14);
     self.titleLabel.textColor = UIColor.darkGrayColor();
@@ -124,7 +124,7 @@ var SZWebViewController = JSB.defineClass('SZWebViewController : UIViewControlle
         var newHeight = Math.max(300, self._resizeStartFrame.height + dy);
         
         // Use bounds for debugging
-        JSB.log("MNZotero: Resize new frame: " + JSON.stringify({width: newWidth, height: newHeight}));
+        console.log("MNZotero: Resize new frame: " + JSON.stringify({width: newWidth, height: newHeight}));
 
         self.view.frame = {
             x: self._resizeStartFrame.x,
@@ -212,6 +212,76 @@ var SZWebViewController = JSB.defineClass('SZWebViewController : UIViewControlle
     if (scheme !== 'mnzotero') return true;
     var host = String(url.host || '');
     var path = String(request.URL().path || '');
+    var urlStringForQuery = urlString;
+
+    if (host === 'createNote' || path.indexOf('createNote') !== -1) {
+      var queryString = '';
+      try {
+        var q = url.query;
+        if (typeof q === 'function') q = q();
+        if (q) queryString = String(q);
+        else if (urlStringForQuery.indexOf('?') !== -1) queryString = urlStringForQuery.split('?')[1] || '';
+      } catch (e) {
+        if (urlStringForQuery.indexOf('?') !== -1) queryString = urlStringForQuery.split('?')[1] || '';
+      }
+      var title = '';
+      if (queryString) {
+        var parts = queryString.split('&');
+        for (var i = 0; i < parts.length; i++) {
+          var eq = parts[i].indexOf('=');
+          if (eq !== -1 && decodeURIComponent(parts[i].substring(0, eq)) === 'title') {
+            title = decodeURIComponent(parts[i].substring(eq + 1).replace(/\+/g, ' '));
+            break;
+          }
+        }
+      }
+      if (!title) return false;
+      var targetWindow = (self.addon && self.addon.window) ? self.addon.window : self.addonWindow;
+      if (!targetWindow) return false;
+      var studyController = null;
+      try {
+        studyController = Application.sharedInstance().studyController(targetWindow);
+      } catch (e) {
+        return false;
+      }
+      var notebookId = null;
+      try {
+        var nc = studyController.notebookController;
+        if (nc) {
+          notebookId = nc.currTopic;
+          if (notebookId === undefined && typeof nc.currTopic === 'function') notebookId = nc.currTopic();
+          if (notebookId === undefined) notebookId = nc.notebookId;
+          if (notebookId === undefined) notebookId = nc.topicId;
+        }
+      } catch (e) { }
+      if (notebookId === undefined && self.currentNotebookId) notebookId = self.currentNotebookId;
+      if (!notebookId) return false;
+      var db = Database.sharedInstance();
+      var notebook = db.getNotebookById(notebookId);
+      if (!notebook) return false;
+      var doc = (notebook.documents && notebook.documents.length > 0) ? notebook.documents[0] : (notebook.mainDocMd5 ? db.getDocumentById(notebook.mainDocMd5) : undefined);
+      if (!doc) {
+        Application.sharedInstance().showHUD('请先打开文档', self.view, 2);
+        return false;
+      }
+      var topicId = notebook.topicId || notebook.topicid;
+      var newNote = undefined;
+      UndoManager.sharedInstance().undoGrouping(
+        "Create Note",
+        topicId,
+        function() {
+          try {
+            newNote = Note.createWithTitleNotebookDocument(title, notebook, doc);
+          } catch (e) { }
+        }
+      );
+      Application.sharedInstance().refreshAfterDBChanged(topicId);
+      try {
+        if (newNote) Application.sharedInstance().showHUD('已创建卡片', self.view, 1.5);
+      } catch (e) { }
+      return false;
+    }
+
     if (host === 'fetch' || path.indexOf('fetch') !== -1) {
         webView.evaluateJavaScript('window.__mnFetchPending', function(result) {
           if (!result || result.length === 0) return;
@@ -229,22 +299,22 @@ var SZWebViewController = JSB.defineClass('SZWebViewController : UIViewControlle
               var body = res.json ? res.json() : (res.text ? res.text() : null);
               var ok = status >= 200 && status < 300;
               var payload = JSON.stringify({ ok: ok, status: status, body: body });
-              webView.evaluateJavaScript("(function(){ var c = window.__mnFetchCb && window.__mnFetchCb['" + id + "']; if(c) c(null, " + payload + "); })();", null);
+              webView.evaluateJavaScript("(function(){ var c = window.__mnFetchCb && window.__mnFetchCb['" + id + "']; if(c) c(null, " + payload + "); })();", function(){});
             }, function(err) {
               var msg = (err && (err.message || err.toString)) ? (err.message || err.toString()) : String(err);
               var esc = (msg || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/\r/g, '').replace(/\n/g, '\\n');
-              webView.evaluateJavaScript("(function(){ var c = window.__mnFetchCb && window.__mnFetchCb['" + id + "']; if(c) c('" + esc + "', null); })();", null);
+              webView.evaluateJavaScript("(function(){ var c = window.__mnFetchCb && window.__mnFetchCb['" + id + "']; if(c) c('" + esc + "', null); })();", function(){});
             });
           } catch (e) {
             try { var p = JSON.parse(result); if (p && p.id) id = p.id; } catch (_) {}
             var msg = (e && (e.message || e.toString)) ? (e.message || e.toString()) : String(e);
             var esc = (msg || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/\r/g, '').replace(/\n/g, '\\n');
-            webView.evaluateJavaScript("(function(){ var c = window.__mnFetchCb && window.__mnFetchCb['" + (id || '') + "']; if(c) c('" + esc + "', null); })();", null);
+            webView.evaluateJavaScript("(function(){ var c = window.__mnFetchCb && window.__mnFetchCb['" + (id || '') + "']; if(c) c('" + esc + "', null); })();", function(){});
           }
         });
         return false;
     }
-    JSB.log('MNLOG %@', request);
+    console.log('MNLOG %@', request);
     return true;
   },
 

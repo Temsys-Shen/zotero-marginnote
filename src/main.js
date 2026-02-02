@@ -22,6 +22,8 @@ JSB.newAddon = function(mainPath){
         };
         self.webController = SZWebViewController.new();
         self.webController.mainPath = mainPath;
+        self.webController.addonWindow = self.window;
+        self.webController.addon = self;
     },
     //Window disconnect
     sceneDidDisconnect: function() {
@@ -33,6 +35,8 @@ JSB.newAddon = function(mainPath){
     sceneDidBecomeActive: function() {
     },
     notebookWillOpen: function(notebookid) {
+      self.webController.addon = self;
+      self.webController.currentNotebookId = notebookid;
       NSTimer.scheduledTimerWithTimeInterval(0.2,false,function(){
         var sample_on = NSUserDefaults.standardUserDefaults().objectForKey('marginnote_sample_w_on');
         if(sample_on == true){// Not support in card deck mode
