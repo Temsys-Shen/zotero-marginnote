@@ -142,10 +142,13 @@
       box-shadow: none;
     }
 
-    input:focus,
-    select:focus {
+    input:focus {
       background: #fff;
       box-shadow: 0 0 0 2px var(--accent);
+    }
+    select:focus {
+      background: #EFEFF4;
+      box-shadow: none;
     }
 
     /* Local/Cloud mode toggle (Redesigned: iOS Segmented Control) */
@@ -229,6 +232,24 @@
 
     #btn:active {
       opacity: 0.7;
+    }
+
+    /* 筛选行 */
+    .filter-row {
+      display: flex;
+      gap: 8px;
+      margin-top: 12px;
+    }
+    .filter-row select {
+      flex: 1;
+      min-width: 0;
+    }
+    #filter-tag.reorder-done {
+      transition: background-color 0.2s ease, box-shadow 0.2s ease;
+    }
+    #filter-tag.reorder-flash {
+      background-color: var(--accent-bg);
+      box-shadow: 0 0 0 1px var(--accent);
     }
 
     /* 3. 滚动内容区域 */
@@ -403,6 +424,13 @@
       <input id="q" placeholder="Keywords (Title, Author, Year)..." onkeydown="event.key=='Enter'&&run()">
       <button id="btn" onclick="run()">Search</button>
     </div>
+    <div class="filter-row">
+      <select id="filter-collection">
+        <option value="">All</option>
+      </select>
+      <select id="filter-tag" multiple size="4">
+      </select>
+    </div>
   </header>
 
   <div id="content-area">
@@ -414,11 +442,70 @@
     const $ = i => document.getElementById(i);
     const API = { L: 'http://localhost:23119/api/users', C: 'https://api.zotero.org/users' };
 
+    function resetFilterOptions() {
+      var colSelect = $('filter-collection');
+      var tagSelect = $('filter-tag');
+      if (colSelect) { colSelect.innerHTML = '<option value="">All</option>'; }
+      if (tagSelect) { tagSelect.innerHTML = ''; }
+    }
+
+    async function loadFilters() {
+      var mode = $('mode').value;
+      var uid = ($('uid') && $('uid').value) || '';
+      var key = ($('key') && $('key').value) || '';
+      if (mode === 'L') uid = '0';
+      if (mode === 'C' && !uid) return;
+      var headers = { 'Zotero-API-Version': 3 };
+      if (mode === 'C' && key) headers['Zotero-API-Key'] = key;
+      var base = API[mode] + '/' + uid;
+      var doFetch = mode === 'L' ? localFetch : function (url, opts) { return fetch(url, opts); };
+      var colSelect = $('filter-collection');
+      var tagSelect = $('filter-tag');
+      if (!colSelect || !tagSelect) return;
+      colSelect.innerHTML = '<option value="">All</option>';
+      tagSelect.innerHTML = '';
+      try {
+        var colRes = await doFetch(base + '/collections', { headers: headers });
+        if (colRes.ok) {
+          var colls = await colRes.json();
+          if (Array.isArray(colls)) {
+            for (var c = 0; c < colls.length; c++) {
+              var ckey = colls[c].key;
+              var cname = (colls[c].data && colls[c].data.name) ? colls[c].data.name : (ckey || '');
+              var opt = document.createElement('option');
+              opt.value = ckey || '';
+              opt.textContent = cname;
+              colSelect.appendChild(opt);
+            }
+          }
+        }
+      } catch (e) { }
+      try {
+        var tagRes = await doFetch(base + '/tags', { headers: headers });
+        if (tagRes.ok) {
+          var tags = await tagRes.json();
+          if (Array.isArray(tags)) {
+            for (var t = 0; t < tags.length; t++) {
+              var tagName = tags[t].tag != null ? String(tags[t].tag) : '';
+              if (!tagName) continue;
+              var topt = document.createElement('option');
+              topt.value = encodeURIComponent(tagName);
+              topt.textContent = tagName;
+              tagSelect.appendChild(topt);
+            }
+          }
+        }
+      } catch (e) { }
+    }
+    window.__onPanelShow = function () { loadFilters(); };
+
     function upd() {
       const isC = $('mode').value === 'C';
       $('key').style.display = isC ? 'block' : 'none';
       $('uid').style.display = isC ? 'block' : 'none';
       $('slug').style.display = isC ? 'block' : 'none';
+      resetFilterOptions();
+      loadFilters();
     }
 
     (function initModeOptions() {
@@ -431,10 +518,12 @@
         if (val) $(id).value = val;
       });
 
-      // Save changes automatically
+      // Save changes automatically; reset filter options when uid/slug/key change
       ['uid', 'slug', 'key'].forEach(id => {
         $(id).addEventListener('input', function() {
           localStorage.setItem('zotero_' + id, this.value);
+          resetFilterOptions();
+          loadFilters();
         });
       });
 
@@ -453,6 +542,21 @@
         });
       });
       upd();
+      var colSelect = $('filter-collection');
+      var tagSelect = $('filter-tag');
+      if (colSelect) colSelect.addEventListener('change', function () { this.blur(); });
+      if (tagSelect) {
+        tagSelect.addEventListener('change', function () {
+          var sel = this;
+          var selected = Array.from(sel.selectedOptions || []);
+          if (selected.length === 0) return;
+          for (var i = selected.length - 1; i >= 0; i--) sel.insertBefore(selected[i], sel.firstChild);
+          sel.classList.add('reorder-done', 'reorder-flash');
+          setTimeout(function () {
+            sel.classList.remove('reorder-flash');
+          }, 200);
+        });
+      }
     })();
 
     function localFetch(url, options) {
@@ -516,13 +620,19 @@
       const base = `${API[mode]}/${uid}`;
       const doFetch = mode === 'L' ? localFetch : function (url, opts) { return fetch(url, opts); };
 
+      var colSelect = $('filter-collection');
+      var tagSelect = $('filter-tag');
+      var collectionKey = (colSelect && colSelect.value ? colSelect.value : '').trim();
+      var selectedTags = tagSelect && tagSelect.selectedOptions ? Array.from(tagSelect.selectedOptions).map(function (o) { return o.value; }) : [];
+      var path = collectionKey ? base + '/collections/' + collectionKey + '/items' : base + '/items';
+      var params = ['limit=100'];
+      if (q) params.push('q=' + encodeURIComponent(q));
+      for (var ti = 0; ti < selectedTags.length; ti++) { params.push('tag=' + selectedTags[ti]); }
+      var queryString = params.length ? ('?' + params.join('&')) : '';
+      var url = path + queryString;
+
       try {
-        // 1. Fetch
-        // If q is empty, don't use ?q= parameter
-        // Remove limit restriction (Zotero default limit is usually 25, we can set it higher or remove it to use default)
-        // Note: Zotero API limit max is 100. To get ALL, we need pagination, but for "unlimited" single request we can try max limit.
-        const queryParam = q ? `?q=${encodeURIComponent(q)}&limit=100` : `?limit=100`;
-        const r1 = await doFetch(`${base}/items${queryParam}`, { headers: headers });
+        var r1 = await doFetch(url, { headers: headers });
         if (!r1.ok) throw new Error("Connection Failed");
 
         // 2. Filter
@@ -557,7 +667,7 @@
             var year = (d.date || '').substring(0, 4) || '';
             var author = (d.creators && d.creators[0] && d.creators[0].lastName) || 'Unknown';
             var createNoteUrl = buildCreateNoteUrl(d.title || 'Untitled', d.itemType, year, author, lItem, pdf ? ('zotero://open-pdf/library/items/' + pdf) : '', '', '', d.key, mode, uid, key);
-            cards.push('<div class="list-item"><div class="list-item-body"><div class="list-title">' + addTitle + '</div><div class="meta-row"><span class="tag">' + d.itemType + '</span><span>' + author + '</span><span>' + (d.date || '') + '</span></div><div class="action-row">' + btns + '</div></div><a href="' + createNoteUrl + '" class="add-to-mn-btn" title="在当前位置创建卡片">+</a></div>');
+            cards.push('<div class="list-item"><div class="list-item-body"><div class="list-title">' + addTitle + '</div><div class="meta-row"><span class="tag">' + d.itemType + '</span><span>' + author + '</span><span>' + (d.date || '') + '</span></div><div class="action-row">' + btns + '</div></div><a href="' + createNoteUrl + '" class="add-to-mn-btn" title="Add to MN">+</a></div>');
           }
         } else {
           cards = await Promise.all(items.map(async function (item) {
@@ -584,7 +694,7 @@
             var year = (d.date || '').substring(0, 4) || '';
             var author = (d.creators && d.creators[0] && d.creators[0].lastName) || 'Unknown';
             var createNoteUrl = buildCreateNoteUrl(d.title || 'Untitled', d.itemType, year, author, lItem, pdf ? lPdf : '', cItem, pdf ? cPdf : '', d.key, mode, uid, key);
-            return '<div class="list-item"><div class="list-item-body"><div class="list-title">' + addTitle + '</div><div class="meta-row"><span class="tag">' + d.itemType + '</span><span>' + author + '</span><span>' + (d.date || '') + '</span></div><div class="action-row">' + btns + '</div></div><a href="' + createNoteUrl + '" class="add-to-mn-btn" title="在当前位置创建卡片">+</a></div>';
+            return '<div class="list-item"><div class="list-item-body"><div class="list-title">' + addTitle + '</div><div class="meta-row"><span class="tag">' + d.itemType + '</span><span>' + author + '</span><span>' + (d.date || '') + '</span></div><div class="action-row">' + btns + '</div></div><a href="' + createNoteUrl + '" class="add-to-mn-btn" title="Add to MN">+</a></div>';
           }));
         }
 

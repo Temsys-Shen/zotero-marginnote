@@ -164,6 +164,7 @@ var SZWebViewController = JSB.defineClass('SZWebViewController : UIViewControlle
 
   viewWillAppear: function(animated) {
     self.webView.delegate = self;
+    self.webView.evaluateJavaScript("typeof window.__onPanelShow==='function'&&window.__onPanelShow();", function() {});
   },
   viewWillDisappear: function(animated) {
     self.webView.stopLoading();
