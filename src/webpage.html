@@ -38,7 +38,7 @@
       -webkit-touch-callout: default;
     }
 
-    /* 1. 全屏重置 */
+    /* 1. 全屏重置 - iOS system grouped background */
     html,
     body {
       margin: 0;
@@ -46,10 +46,9 @@
       width: 100%;
       height: 100%;
       font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
-      background-color: var(--bg);
+      background-color: #F2F2F7;
       color: var(--text);
       overflow: hidden;
-      /* 禁止 body 滚动，由内部容器接管 */
       display: flex;
       flex-direction: column;
     }
@@ -397,6 +396,125 @@
     }
 
     /* Green */
+
+    /* View switcher: Library | Selected Cards */
+    .view-switcher {
+      display: flex;
+      align-items: center;
+      background-color: #7676801f;
+      padding: 2px;
+      border-radius: 8px;
+      margin-top: 12px;
+    }
+    .selected-reload-icon {
+      color: var(--sub);
+      font-size: 18px;
+      line-height: 12px;
+      margin-left: 4px;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+    .view-option {
+      flex: 1;
+      padding: 6px 8px;
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--text);
+      text-align: center;
+      cursor: pointer;
+      border-radius: 6px;
+      border: 1px solid transparent;
+      background: transparent;
+      transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+      user-select: none;
+      -webkit-user-select: none;
+    }
+    .view-option.active {
+      background: #FFFFFF;
+      color: #000;
+      font-weight: 600;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12), 0 0.5px 1px rgba(0, 0, 0, 0.04);
+      border: 0.5px solid rgba(0, 0, 0, 0.04);
+    }
+    .view-option:not(.active):hover {
+      background: rgba(255, 255, 255, 0.4);
+    }
+
+    /* Library view: search + filters + content */
+    /* Library view: iOS-style white surface, outer margin around form */
+    #library-view {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      min-height: 0;
+      background-color: var(--surface);
+      padding: 16px;
+      margin: 0;
+    }
+    #library-view .search-bar { margin-bottom: 0; }
+    #library-view .filter-row { flex-shrink: 0; }
+    #library-view #content-area {
+      flex: 1;
+      min-height: 0;
+      padding-left: 0;
+      padding-right: 0;
+      padding-bottom: 16px;
+    }
+
+    /* Selected Cards panel */
+    #selected-panel {
+      display: none;
+      flex: 1;
+      flex-direction: column;
+      overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
+      padding: 16px;
+      gap: 12px;
+      min-height: 0;
+    }
+    #selected-panel.show {
+      display: flex;
+    }
+    .selected-empty-state {
+      font-size: 13px;
+      color: var(--sub);
+      text-align: center;
+      padding: 24px 16px;
+    }
+    .selected-toolbar {
+      display: flex;
+      gap: 8px;
+      padding: 4px 0 12px 0;
+      flex-shrink: 0;
+      border-bottom: 1px solid var(--border);
+      margin-bottom: 8px;
+    }
+    .selected-toolbar button {
+      padding: 0 16px;
+      font-size: 14px;
+      font-weight: 600;
+      border: none;
+      border-radius: 10px;
+      cursor: pointer;
+      white-space: nowrap;
+      height: 36px;
+      line-height: 36px;
+    }
+    .selected-toolbar button:active { opacity: 0.7; }
+    #btn-select-in-zotero {
+      background: var(--accent);
+      color: white;
+    }
+    #btn-copy-reference {
+      background: var(--surface);
+      color: var(--text);
+      border: 1px solid var(--border);
+    }
+    #btn-copy-reference:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
   </style>
 </head>
 
@@ -406,7 +524,7 @@
     <div class="top-row">
       <h1>Zotero Connector</h1>
       <details id="settings-details">
-        <summary>⚙️ Settings</summary>
+        <summary>Settings</summary>
         <div class="config-panel">
           <input type="hidden" id="mode" value="L">
           <div class="mode-options">
@@ -420,6 +538,13 @@
       </details>
     </div>
 
+    <div class="view-switcher">
+      <span class="view-option active" data-view="library" role="button">Library</span>
+      <span class="view-option" data-view="selected" role="button">Selected Cards<span id="selected-reload-icon" class="selected-reload-icon" style="display: none;"> ⟳</span></span>
+    </div>
+  </header>
+
+  <div id="library-view">
     <div class="search-bar">
       <input id="q" placeholder="Keywords (Title, Author, Year)..." onkeydown="event.key=='Enter'&&run()">
       <button id="btn" onclick="run()">Search</button>
@@ -431,11 +556,19 @@
       <select id="filter-tag" multiple size="4">
       </select>
     </div>
-  </header>
+    <div id="content-area">
+      <div id="log">Ready to search.</div>
+      <div id="out"></div>
+    </div>
+  </div>
 
-  <div id="content-area">
-    <div id="log">Ready to search.</div>
-    <div id="out"></div>
+  <div id="selected-panel">
+    <div id="selected-toolbar" class="selected-toolbar" style="display: none;">
+      <button type="button" id="btn-select-in-zotero">Select in Zotero</button>
+      <button type="button" id="btn-copy-reference" disabled>Copy Reference</button>
+    </div>
+    <div id="selected-empty" class="selected-empty-state">Loading…</div>
+    <div id="selected-list" class="list-container" style="display: none;"></div>
   </div>
 
   <script>
@@ -498,6 +631,89 @@
       } catch (e) { }
     }
     window.__onPanelShow = function () { loadFilters(); };
+
+    function showLibraryView() {
+      $('library-view').style.display = 'flex';
+      $('selected-panel').classList.remove('show');
+      var icon = $('selected-reload-icon');
+      if (icon) icon.style.display = 'none';
+      var opts = document.querySelectorAll('.view-option[data-view]');
+      opts.forEach(function (o) {
+        o.classList.toggle('active', o.getAttribute('data-view') === 'library');
+      });
+    }
+    function showSelectedCardsView() {
+      $('library-view').style.display = 'none';
+      $('selected-panel').classList.add('show');
+      var icon = $('selected-reload-icon');
+      if (icon) icon.style.display = 'inline';
+      var opts = document.querySelectorAll('.view-option[data-view]');
+      opts.forEach(function (o) {
+        o.classList.toggle('active', o.getAttribute('data-view') === 'selected');
+      });
+      $('selected-empty').style.display = 'block';
+      $('selected-empty').textContent = 'Loading…';
+      $('selected-list').style.display = 'none';
+      $('selected-list').innerHTML = '';
+      var iframe = document.createElement('iframe');
+      iframe.style.display = 'none';
+      iframe.src = 'mnzotero://getSelectedNotes';
+      document.body.appendChild(iframe);
+      setTimeout(function () { try { iframe.remove(); } catch (e) { } }, 500);
+    }
+    function switchView(view) {
+      if (view === 'library') showLibraryView();
+      else if (view === 'selected') showSelectedCardsView();
+    }
+    window.onSelectedNotes = function () {
+      var list = window.__selectedNotes;
+      if (!Array.isArray(list)) list = [];
+      var toolbarEl = $('selected-toolbar');
+      var emptyEl = $('selected-empty');
+      var listEl = $('selected-list');
+      if (list.length === 0) {
+        if (toolbarEl) toolbarEl.style.display = 'none';
+        emptyEl.style.display = 'block';
+        emptyEl.textContent = 'No literature cards in current selection.';
+        listEl.style.display = 'none';
+        listEl.innerHTML = '';
+        return;
+      }
+      if (toolbarEl) toolbarEl.style.display = 'flex';
+      emptyEl.style.display = 'none';
+      listEl.style.display = 'block';
+      var html = list.map(function (item) {
+        var title = (item.title || '').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+        return '<div class="list-item"><div class="list-item-body"><div class="list-title">' + title + '</div></div></div>';
+      }).join('');
+      listEl.innerHTML = html;
+    };
+    (function initSelectedToolbar() {
+      var btnSelect = $('btn-select-in-zotero');
+      if (btnSelect) {
+        btnSelect.addEventListener('click', function () {
+          var list = window.__selectedNotes;
+          if (!Array.isArray(list) || list.length === 0) return;
+          var keys = list.map(function (item) { return item.itemKey || ''; }).filter(Boolean);
+          if (keys.length === 0) return;
+          var url = 'zotero://select/library/items?itemKey=' + keys.join(',');
+          var a = document.createElement('a');
+          a.href = url;
+          a.style.display = 'none';
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+        });
+      }
+    })();
+    (function initViewSwitcher() {
+      document.querySelectorAll('.view-option[data-view]').forEach(function (el) {
+        el.addEventListener('click', function () {
+          var view = this.getAttribute('data-view');
+          if (view) switchView(view);
+        });
+      });
+    })();
 
     function upd() {
       const isC = $('mode').value === 'C';

@@ -1,4 +1,5 @@
 JSB.require('network');
+JSB.require('SelectedNotesHelper');
 
 var SZWebViewController = JSB.defineClass('SZWebViewController : UIViewController <UIWebViewDelegate>', {
   viewDidLoad: function() {
@@ -213,6 +214,20 @@ var SZWebViewController = JSB.defineClass('SZWebViewController : UIViewControlle
     var host = String(url.host || '');
     var path = String(request.URL().path || '');
     var urlStringForQuery = urlString;
+
+    if (host === 'getSelectedNotes' || path.indexOf('getSelectedNotes') !== -1) {
+      var targetWindow = (self.addon && self.addon.window) ? self.addon.window : self.addonWindow;
+      var list = [];
+      if (targetWindow && typeof getSelectedLiteratureNotes === 'function') {
+        try {
+          list = getSelectedLiteratureNotes(targetWindow);
+        } catch (e) { }
+      }
+      var jsonStr = JSON.stringify(list);
+      var esc = jsonStr.replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/\r/g, '').replace(/\n/g, '\\n');
+      webView.evaluateJavaScript("(function(){ try { window.__selectedNotes = JSON.parse('" + esc + "'); } catch (_) { window.__selectedNotes = []; } if (window.onSelectedNotes) window.onSelectedNotes(); })();", null);
+      return false;
+    }
 
     if (host === 'createNote' || path.indexOf('createNote') !== -1) {
       var queryString = '';
