@@ -224,6 +224,7 @@ var SZWebViewController = JSB.defineClass('SZWebViewController : UIViewControlle
         if (urlStringForQuery.indexOf('?') !== -1) queryString = urlStringForQuery.split('?')[1] || '';
       }
       var title = '', type = '', year = '', author = '', lZ = '', lP = '', lW = '', lC = '';
+      var itemKey = '', zoteroMode = '', zoteroUid = '', zoteroApiKey = '';
       if (queryString) {
         var parts = queryString.split('&');
         for (var i = 0; i < parts.length; i++) {
@@ -239,6 +240,10 @@ var SZWebViewController = JSB.defineClass('SZWebViewController : UIViewControlle
           else if (key === 'lP') lP = val;
           else if (key === 'lW') lW = val;
           else if (key === 'lC') lC = val;
+          else if (key === 'itemKey') itemKey = val;
+          else if (key === 'mode') zoteroMode = val;
+          else if (key === 'uid') zoteroUid = val;
+          else if (key === 'key') zoteroApiKey = val;
         }
       }
       if (!title) return false;
@@ -311,9 +316,33 @@ var SZWebViewController = JSB.defineClass('SZWebViewController : UIViewControlle
         }
       );
       Application.sharedInstance().refreshAfterDBChanged(topicId);
-      try {
-        if (newNote) Application.sharedInstance().showHUD('已创建卡片', self.view, 1.5);
-      } catch (e) { }
+      if (newNote && itemKey) {
+        try {
+          var noteId = newNote.noteId;
+          if (noteId !== undefined && noteId !== null) {
+            var notebookTitle = (notebook.title !== undefined && notebook.title !== null) ? String(notebook.title) : '';
+            var attachmentTitle = notebookTitle ? ('在MarginNote中打开-' + notebookTitle) : '在MarginNote中打开';
+            var postUid = zoteroUid || '0';
+            var postUrl = (zoteroMode === 'C') ? ('https://api.zotero.org/users/' + postUid + '/items') : ('http://localhost:23119/api/users/' + postUid + '/items');
+            var postHeaders = { 'Content-Type': 'application/json', 'Zotero-API-Version': '3' };
+            if (zoteroMode === 'C' && zoteroApiKey) postHeaders['Zotero-API-Key'] = zoteroApiKey;
+            var postBody = [{ itemType: 'attachment', linkMode: 'linked_url', parentItem: itemKey, title: attachmentTitle, url: 'marginnote4app://note/' + String(noteId) }];
+            SZMNNetwork.fetch(postUrl, { method: 'POST', headers: postHeaders, json: postBody }).then(function() {
+              try { Application.sharedInstance().showHUD('已创建卡片', self.view, 1.5); } catch (e) { }
+            }, function() {
+              try { Application.sharedInstance().showHUD('已创建卡片，Zotero 附件添加失败', self.view, 2); } catch (e) { }
+            });
+          } else {
+            try { Application.sharedInstance().showHUD('已创建卡片', self.view, 1.5); } catch (e) { }
+          }
+        } catch (e) {
+          try { Application.sharedInstance().showHUD('已创建卡片', self.view, 1.5); } catch (err) { }
+        }
+      } else {
+        try {
+          if (newNote) Application.sharedInstance().showHUD('已创建卡片', self.view, 1.5);
+        } catch (e) { }
+      }
       return false;
     }
 

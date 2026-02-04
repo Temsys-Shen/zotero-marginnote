@@ -1,9 +1,9 @@
 {
     "name": "zotero-mnaddon",
-    "version": "0.1.0",
+    "version": "0.2.0",
     "private": true,
     "scripts": {
-        "build": "cd src && zip -r -q ../zotero-connector-v0.1.0.mnaddon ."
+        "build": "cd src && zip -r -q ../zotero-connector-v0.2.0.mnaddon ."
     },
     "devDependencies": {
     }
