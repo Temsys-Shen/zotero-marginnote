@@ -292,20 +292,20 @@ var SZWebViewController = JSB.defineClass('SZWebViewController : UIViewControlle
               if (!s) return '';
               return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
             };
-            var body = '<div style="font-family:sans-serif;padding:20px 28px;background:#FAFAFA;border-left:6px solid #007AFF;border-radius:6px;margin:14px 0;">';
+            var body = '<div style="font-family:sans-serif;padding:20px 28px;background:rgb(250,250,250);border-left:6px solid rgb(0,122,255);border-radius:6px;margin:14px 0;">';
             if (hasMeta) {
               body += '<div style="margin-bottom:12px;">';
               var yearAuthor = [year, author].filter(Boolean).join(' ');
-              if (yearAuthor) body += '<span style="font-size:32px;font-weight:bold;color:#333;margin-right:12px;">' + esc(yearAuthor) + '</span>';
-              if (type) body += '<span style="color:#999;font-size:22px;border:1px solid #ddd;padding:4px 14px;border-radius:12px;vertical-align:text-bottom;">' + esc(type) + '</span>';
+              if (yearAuthor) body += '<span style="font-size:32px;font-weight:bold;color:rgb(51,51,51);margin-right:12px;">' + esc(yearAuthor) + '</span>';
+              if (type) body += '<span style="color:rgb(153,153,153);font-size:22px;border:1px solid rgb(221,221,221);padding:4px 14px;border-radius:12px;vertical-align:text-bottom;">' + esc(type) + '</span>';
               body += '</div>';
             }
             if (hasLinks) {
               body += '<div style="display:flex;gap:24px;">';
-              if (lZ) body += '<a href="' + lZ + '" style="text-decoration:none;color:#007AFF;font-weight:600;font-size:24px;">🔗 Open in Zotero</a>';
-              if (lP) body += '<a href="' + lP + '" style="text-decoration:none;color:#2E7D32;font-weight:600;font-size:24px;">📑 Read PDF</a>';
-              if (lW) body += '<a href="' + lW + '" style="text-decoration:none;color:#666;font-weight:600;font-size:24px;">🌐 Web</a>';
-              if (lC) body += '<a href="' + lC + '" style="text-decoration:none;color:#666;font-weight:600;font-size:24px;">📑 Cloud PDF</a>';
+              if (lZ) body += '<a href="' + lZ + '" style="text-decoration:none;color:rgb(0,122,255);font-weight:600;font-size:24px;">🔗 Open in Zotero</a>';
+              if (lP) body += '<a href="' + lP + '" style="text-decoration:none;color:rgb(46,125,50);font-weight:600;font-size:24px;">📑 Read PDF</a>';
+              if (lW) body += '<a href="' + lW + '" style="text-decoration:none;color:rgb(102,102,102);font-weight:600;font-size:24px;">🌐 Web</a>';
+              if (lC) body += '<a href="' + lC + '" style="text-decoration:none;color:rgb(102,102,102);font-weight:600;font-size:24px;">📑 Cloud PDF</a>';
               body += '</div>';
             }
             body += '</div>';
