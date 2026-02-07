@@ -18,6 +18,8 @@ var SZWebViewController = JSB.defineClass('SZWebViewController : UIViewControlle
     var bounds = self.view.bounds;
     var initWidth = bounds.width > 0 ? bounds.width : 300;
     var initHeight = bounds.height > 0 ? bounds.height : 400;
+    
+    self._isMaximized = false;
 
     // Container view (renamed to containerView to avoid potential conflict)
     self.containerView = new UIView({x: 0, y: 0, width: initWidth, height: initHeight});
@@ -48,6 +50,14 @@ var SZWebViewController = JSB.defineClass('SZWebViewController : UIViewControlle
     // Pan Gesture for Title Bar
     var panRecognizer = new UIPanGestureRecognizer(self, "handlePan:");
     self.titleBar.addGestureRecognizer(panRecognizer);
+    
+    // Double Tap Gesture for Title Bar
+    var doubleTapRecognizer = new UITapGestureRecognizer(self, "handleTitleBarDoubleTap:");
+    doubleTapRecognizer.numberOfTapsRequired = 2;
+    self.titleBar.addGestureRecognizer(doubleTapRecognizer);
+    
+    panRecognizer.requireGestureRecognizerToFail(doubleTapRecognizer);
+    
     self.containerView.addSubview(self.titleBar);
 
     // 3. WebView
@@ -79,6 +89,13 @@ var SZWebViewController = JSB.defineClass('SZWebViewController : UIViewControlle
 
     var resizeRecognizer = new UIPanGestureRecognizer(self, "handleResize:");
     self.resizeHandle.addGestureRecognizer(resizeRecognizer);
+    
+    var doubleTapRecognizer = new UITapGestureRecognizer(self, "handleResizeDoubleTap:");
+    doubleTapRecognizer.numberOfTapsRequired = 2;
+    self.resizeHandle.addGestureRecognizer(doubleTapRecognizer);
+    
+    resizeRecognizer.requireGestureRecognizerToFail(doubleTapRecognizer);
+    
     self.containerView.addSubview(self.resizeHandle);
 
     var htmlPath = self.mainPath ? (self.mainPath + '/webpage.html') : null;
@@ -93,7 +110,24 @@ var SZWebViewController = JSB.defineClass('SZWebViewController : UIViewControlle
   handlePan: function(recognizer) {
     var translation = recognizer.translationInView(self.view.superview);
     var center = self.view.center;
-    self.view.center = {x: center.x + translation.x, y: center.y + translation.y};
+    var newCenter = {x: center.x + translation.x, y: center.y + translation.y};
+    
+    var frame = self.view.frame;
+    var superviewBounds = self.view.superview ? self.view.superview.bounds : {x: 0, y: 0, width: 1920, height: 1080};
+    var leftMargin = 0;
+    var topMargin = 0;
+    var rightMargin = 0;
+    var bottomMargin = 0;
+    
+    var minX = superviewBounds.x + leftMargin + frame.width / 2;
+    var maxX = superviewBounds.x + superviewBounds.width - frame.width / 2 + rightMargin;
+    var minY = superviewBounds.y + topMargin + frame.height / 2;
+    var maxY = superviewBounds.y + superviewBounds.height - frame.height / 2 + bottomMargin;
+    
+    newCenter.x = Math.max(minX, Math.min(maxX, newCenter.x));
+    newCenter.y = Math.max(minY, Math.min(maxY, newCenter.y));
+    
+    self.view.center = newCenter;
     recognizer.setTranslationInView({x: 0, y: 0}, self.view.superview);
     
     if (recognizer.state == 3) { // Ended
@@ -110,9 +144,8 @@ var SZWebViewController = JSB.defineClass('SZWebViewController : UIViewControlle
   },
 
   handleResize: function(recognizer) {
-    var location = recognizer.locationInView(self.view.superview); // Get absolute location in superview
+    var location = recognizer.locationInView(self.view.superview);
     if (recognizer.state == 1) { // Began
-        // Store initial touch position and initial frame
         self._resizeStartLocation = location;
         self._resizeStartFrame = self.view.frame;
     } else if (recognizer.state == 2) { // Changed
@@ -124,7 +157,22 @@ var SZWebViewController = JSB.defineClass('SZWebViewController : UIViewControlle
         var newWidth = Math.max(250, self._resizeStartFrame.width + dx);
         var newHeight = Math.max(300, self._resizeStartFrame.height + dy);
         
-
+        var superviewBounds = self.view.superview ? self.view.superview.bounds : {x: 0, y: 0, width: 1920, height: 1080};
+        var rightMargin = 0;
+        var bottomMargin = 0;
+        
+        var maxX = superviewBounds.x + superviewBounds.width + rightMargin;
+        var maxY = superviewBounds.y + superviewBounds.height + bottomMargin;
+        
+        var maxRight = self._resizeStartFrame.x + newWidth;
+        var maxBottom = self._resizeStartFrame.y + newHeight;
+        
+        if (maxRight > maxX) {
+            newWidth = maxX - self._resizeStartFrame.x;
+        }
+        if (maxBottom > maxY) {
+            newHeight = maxY - self._resizeStartFrame.y;
+        }
 
         self.view.frame = {
             x: self._resizeStartFrame.x,
@@ -133,11 +181,9 @@ var SZWebViewController = JSB.defineClass('SZWebViewController : UIViewControlle
             height: newHeight
         };
         
-        // Force layout update if needed
         self.view.setNeedsLayout();
         
     } else if (recognizer.state == 3) { // Ended
-        // self.saveFrameState(); // JSB 实例方法调用可能存在绑定问题，改为直接在这里执行保存逻辑
         var frame = self.view.frame;
         var config = {
             x: frame.x,
@@ -159,6 +205,56 @@ var SZWebViewController = JSB.defineClass('SZWebViewController : UIViewControlle
           y: frame.y,
           width: frame.width,
           height: frame.height
+      };
+      NSUserDefaults.standardUserDefaults().setObjectForKey(config, 'mn_zotero_frame_config');
+  },
+
+  handleResizeDoubleTap: function(recognizer) {
+      var superviewBounds = self.view.superview ? self.view.superview.bounds : {x: 0, y: 0, width: 1920, height: 1080};
+      var frame = self.view.frame;
+      var centerX = superviewBounds.x + superviewBounds.width / 2;
+      var centerY = superviewBounds.y + superviewBounds.height / 2;
+      
+      self.view.center = {x: centerX, y: centerY};
+      
+      var config = {
+          x: self.view.frame.x,
+          y: self.view.frame.y,
+          width: frame.width,
+          height: frame.height
+      };
+      NSUserDefaults.standardUserDefaults().setObjectForKey(config, 'mn_zotero_frame_config');
+  },
+
+  handleTitleBarDoubleTap: function(recognizer) {
+      var superview = self.view.superview;
+      var superviewBounds = superview ? superview.bounds : {x: 0, y: 0, width: 1920, height: 1080};
+      
+      if (!self._isMaximized) {
+          self.view.frame = {
+              x: superviewBounds.x,
+              y: superviewBounds.y,
+              width: superviewBounds.width,
+              height: superviewBounds.height
+          };
+          self._isMaximized = true;
+      } else {
+          var smallWidth = 400;
+          var smallHeight = 500;
+          self.view.frame = {
+              x: (superviewBounds.width - smallWidth) / 2,
+              y: (superviewBounds.height - smallHeight) / 2,
+              width: smallWidth,
+              height: smallHeight
+          };
+          self._isMaximized = false;
+      }
+      
+      var config = {
+          x: self.view.frame.x,
+          y: self.view.frame.y,
+          width: self.view.frame.width,
+          height: self.view.frame.height
       };
       NSUserDefaults.standardUserDefaults().setObjectForKey(config, 'mn_zotero_frame_config');
   },
