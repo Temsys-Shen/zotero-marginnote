@@ -89,10 +89,20 @@
             listEl.style.display = 'block';
             var html = list.map(function (item) {
                 var title = (item.title || '').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-                return '<div class="list-item"><div class="list-item-body"><div class="list-title">' + title + '</div></div></div>';
+                var noteId = item.noteId || '';
+                return '<div class="list-item" onclick="focusNote(\'' + noteId + '\')" style="cursor:pointer;"><div class="list-item-body"><div class="list-title">' + title + '</div></div></div>';
             }).join('');
             listEl.innerHTML = html;
         };
+
+        function focusNote(noteId) {
+            if (!noteId) return;
+            var iframe = document.createElement('iframe');
+            iframe.style.display = 'none';
+            iframe.src = 'mnzotero://focusNote?noteId=' + encodeURIComponent(noteId);
+            document.body.appendChild(iframe);
+            setTimeout(function () { try { iframe.remove(); } catch (e) { } }, 500);
+        }
 
         (function initSelectedToolbar() {
             var btnSelect = $('btn-select-in-zotero');

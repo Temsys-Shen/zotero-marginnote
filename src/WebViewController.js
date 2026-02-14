@@ -288,6 +288,12 @@ var SZZoteroBridge = class {
       return false;
     }
 
+    if (host === 'focusNote' || path.indexOf('focusNote') !== -1) {
+      const queryString = SZZoteroBridge._getQueryString(url, urlString);
+      SZZoteroBridge._handleFocusNote(self, queryString);
+      return false;
+    }
+
     return true;
   }
 
@@ -452,6 +458,26 @@ var SZZoteroBridge = class {
         webView.evaluateJavaScript(`(function(){ var c = window.__mnFetchCb && window.__mnFetchCb['${id || ''}']; if(c) c('${esc}', null); })();`, null);
       }
     });
+  }
+
+  static _handleFocusNote(self, queryString) {
+    if (!queryString) return;
+    let noteId = '';
+    const parts = queryString.split('&');
+    for (const part of parts) {
+      const eq = part.indexOf('=');
+      if (eq === -1) continue;
+      if (decodeURIComponent(part.substring(0, eq)) === 'noteId') {
+        noteId = decodeURIComponent(part.substring(eq + 1).replace(/\+/g, ' '));
+        break;
+      }
+    }
+    if (!noteId) return;
+    const targetWindow = (self.addon && self.addon.window) ? self.addon.window : self.addonWindow;
+    const studyController = Application.sharedInstance().studyController(targetWindow);
+    if (studyController && studyController.focusNoteInMindMapById) {
+      studyController.focusNoteInMindMapById(noteId);
+    }
   }
 }
 
