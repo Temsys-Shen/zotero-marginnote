@@ -1,539 +1,507 @@
 JSB.require('network');
 JSB.require('SelectedNotesHelper');
 
-var SZWebViewController = JSB.defineClass('SZWebViewController : UIViewController <UIWebViewDelegate>', {
-  viewDidLoad: function() {
+/**
+ * UI 交互协调类：负责视图初始化、拖拽拖动、缩放、最大化等逻辑
+ */
+var SZWebUIHandler = class {
+  static setupUI(controller) {
+    const self = controller;
     // 1. View Setup
     self.navigationItem.title = 'Web';
-    
-    // Root view: Clear background + Shadow + NO masking
     self.view.backgroundColor = UIColor.clearColor();
-    self.view.layer.shadowOffset = {width:0,height:2};
+    self.view.layer.shadowOffset = { width: 0, height: 2 };
     self.view.layer.shadowRadius = 4;
     self.view.layer.shadowOpacity = 0.3;
     self.view.layer.shadowColor = UIColor.blackColor();
     self.view.layer.masksToBounds = false;
 
-    // Defend against zero frame initialization
-    var bounds = self.view.bounds;
-    var initWidth = bounds.width > 0 ? bounds.width : 300;
-    var initHeight = bounds.height > 0 ? bounds.height : 400;
-    
+    const bounds = self.view.bounds;
+    const initWidth = bounds.width > 0 ? bounds.width : 300;
+    const initHeight = bounds.height > 0 ? bounds.height : 400;
+
     self._isMaximized = false;
 
-    // Container view (renamed to containerView to avoid potential conflict)
-    self.containerView = new UIView({x: 0, y: 0, width: initWidth, height: initHeight});
+    // Container view
+    self.containerView = new UIView({ x: 0, y: 0, width: initWidth, height: initHeight });
     self.containerView.backgroundColor = UIColor.whiteColor();
-    self.containerView.layer.cornerRadius = 10; 
-    self.containerView.layer.masksToBounds = true; // Clip content
+    self.containerView.layer.cornerRadius = 10;
+    self.containerView.layer.masksToBounds = true;
     self.containerView.layer.borderWidth = 0.5;
     self.containerView.layer.borderColor = UIColor.lightGrayColor().colorWithAlphaComponent(0.3);
-    self.containerView.autoresizingMask = (1 << 1 | 1 << 4); // FlexibleWidth | FlexibleHeight
+    self.containerView.autoresizingMask = (1 << 1 | 1 << 4);
     self.view.addSubview(self.containerView);
 
-    var titleHeight = 32;
+    const titleHeight = 32;
 
     // 2. Title Bar
-    self.titleBar = new UIView({x: 0, y: 0, width: initWidth, height: titleHeight});
+    self.titleBar = new UIView({ x: 0, y: 0, width: initWidth, height: titleHeight });
     self.titleBar.backgroundColor = UIColor.colorWithWhiteAlpha(0.96, 1);
-    self.titleBar.autoresizingMask = (1 << 1); // FlexibleWidth
-    
-    // Add Label
-    self.titleLabel = new UILabel({x: 10, y: 0, width: initWidth - 20, height: titleHeight});
+    self.titleBar.autoresizingMask = (1 << 1);
+
+    self.titleLabel = new UILabel({ x: 10, y: 0, width: initWidth - 20, height: titleHeight });
     self.titleLabel.text = "Zotero Connector";
-    self.titleLabel.textAlignment = 1; // Center
+    self.titleLabel.textAlignment = 1;
     self.titleLabel.font = UIFont.boldSystemFontOfSize(14);
     self.titleLabel.textColor = UIColor.darkGrayColor();
-    self.titleLabel.autoresizingMask = (1 << 1); // FlexibleWidth
+    self.titleLabel.autoresizingMask = (1 << 1);
     self.titleBar.addSubview(self.titleLabel);
 
-    // Pan Gesture for Title Bar
-    var panRecognizer = new UIPanGestureRecognizer(self, "handlePan:");
+    const panRecognizer = new UIPanGestureRecognizer(self, "handlePan:");
     self.titleBar.addGestureRecognizer(panRecognizer);
-    
-    // Double Tap Gesture for Title Bar
-    var doubleTapRecognizer = new UITapGestureRecognizer(self, "handleTitleBarDoubleTap:");
+
+    const doubleTapRecognizer = new UITapGestureRecognizer(self, "handleTitleBarDoubleTap:");
     doubleTapRecognizer.numberOfTapsRequired = 2;
     self.titleBar.addGestureRecognizer(doubleTapRecognizer);
-    
     panRecognizer.requireGestureRecognizerToFail(doubleTapRecognizer);
-    
     self.containerView.addSubview(self.titleBar);
 
     // 3. WebView
     self.webView = new UIWebView({
-        x: 0, 
-        y: titleHeight, 
-        width: initWidth, 
-        height: Math.max(0, initHeight - titleHeight)
+      x: 0,
+      y: titleHeight,
+      width: initWidth,
+      height: Math.max(0, initHeight - titleHeight)
     });
     self.webView.backgroundColor = UIColor.whiteColor();
     self.webView.scalesPageToFit = true;
-    self.webView.autoresizingMask = (1 << 1 | 1 << 4); // FlexibleWidth | FlexibleHeight
+    self.webView.autoresizingMask = (1 << 1 | 1 << 4);
     self.webView.delegate = self;
     self.containerView.addSubview(self.webView);
 
     // 4. Resize Handle
-    var resizeSize = 40;
-    self.resizeHandle = new UIView({x: initWidth - resizeSize, y: initHeight - resizeSize, width: resizeSize, height: resizeSize});
-    self.resizeHandle.backgroundColor = UIColor.clearColor(); 
-    self.resizeHandle.autoresizingMask = (1 << 0 | 1 << 3); // FlexibleLeftMargin | FlexibleTopMargin
-    self.resizeHandle.userInteractionEnabled = true; 
-    
-    var resizeIcon = new UILabel({x: 15, y: 15, width: 20, height: 20});
+    const resizeSize = 40;
+    self.resizeHandle = new UIView({ x: initWidth - resizeSize, y: initHeight - resizeSize, width: resizeSize, height: resizeSize });
+    self.resizeHandle.backgroundColor = UIColor.clearColor();
+    self.resizeHandle.autoresizingMask = (1 << 0 | 1 << 3);
+    self.resizeHandle.userInteractionEnabled = true;
+
+    const resizeIcon = new UILabel({ x: 15, y: 15, width: 20, height: 20 });
     resizeIcon.text = "↘";
     resizeIcon.font = UIFont.systemFontOfSize(16);
     resizeIcon.textColor = UIColor.grayColor();
     resizeIcon.alpha = 0.5;
     self.resizeHandle.addSubview(resizeIcon);
 
-    var resizeRecognizer = new UIPanGestureRecognizer(self, "handleResize:");
+    const resizeRecognizer = new UIPanGestureRecognizer(self, "handleResize:");
     self.resizeHandle.addGestureRecognizer(resizeRecognizer);
-    
-    var doubleTapRecognizer = new UITapGestureRecognizer(self, "handleResizeDoubleTap:");
-    doubleTapRecognizer.numberOfTapsRequired = 2;
-    self.resizeHandle.addGestureRecognizer(doubleTapRecognizer);
-    
-    resizeRecognizer.requireGestureRecognizerToFail(doubleTapRecognizer);
-    
-    self.containerView.addSubview(self.resizeHandle);
 
-    var htmlPath = self.mainPath ? (self.mainPath + '/webpage.html') : null;
+    const resDoubleTap = new UITapGestureRecognizer(self, "handleResizeDoubleTap:");
+    resDoubleTap.numberOfTapsRequired = 2;
+    self.resizeHandle.addGestureRecognizer(resDoubleTap);
+    resizeRecognizer.requireGestureRecognizerToFail(resDoubleTap);
+
+    self.containerView.addSubview(self.resizeHandle);
+  }
+
+  static handlePan(controller, recognizer) {
+    const self = controller;
+    const translation = recognizer.translationInView(self.view.superview);
+    const center = self.view.center;
+    const newCenter = { x: center.x + translation.x, y: center.y + translation.y };
+
+    const frame = self.view.frame;
+    const superviewBounds = self.view.superview ? self.view.superview.bounds : { x: 0, y: 0, width: 1920, height: 1080 };
+
+    const minX = superviewBounds.x + frame.width / 2;
+    const maxX = superviewBounds.x + superviewBounds.width - frame.width / 2;
+    const minY = superviewBounds.y + frame.height / 2;
+    const maxY = superviewBounds.y + superviewBounds.height - frame.height / 2;
+
+    newCenter.x = Math.max(minX, Math.min(maxX, newCenter.x));
+    newCenter.y = Math.max(minY, Math.min(maxY, newCenter.y));
+
+    self.view.center = newCenter;
+    recognizer.setTranslationInView({ x: 0, y: 0 }, self.view.superview);
+
+    if (recognizer.state === 3) { // Ended
+      SZConfigManager.saveFrameState(self);
+    }
+  }
+
+  static handleResize(controller, recognizer) {
+    const self = controller;
+    const location = recognizer.locationInView(self.view.superview);
+    if (recognizer.state === 1) { // Began
+      self._resizeStartLocation = location;
+      self._resizeStartFrame = self.view.frame;
+    } else if (recognizer.state === 2) { // Changed
+      if (!self._resizeStartLocation || !self._resizeStartFrame) return;
+
+      const dx = location.x - self._resizeStartLocation.x;
+      const dy = location.y - self._resizeStartLocation.y;
+
+      let newWidth = Math.max(250, self._resizeStartFrame.width + dx);
+      let newHeight = Math.max(300, self._resizeStartFrame.height + dy);
+
+      const superviewBounds = self.view.superview ? self.view.superview.bounds : { x: 0, y: 0, width: 1920, height: 1080 };
+      const maxX = superviewBounds.x + superviewBounds.width;
+      const maxY = superviewBounds.y + superviewBounds.height;
+
+      if (self._resizeStartFrame.x + newWidth > maxX) {
+        newWidth = maxX - self._resizeStartFrame.x;
+      }
+      if (self._resizeStartFrame.y + newHeight > maxY) {
+        newHeight = maxY - self._resizeStartFrame.y;
+      }
+
+      self.view.frame = {
+        x: self._resizeStartFrame.x,
+        y: self._resizeStartFrame.y,
+        width: newWidth,
+        height: newHeight
+      };
+      self.view.setNeedsLayout();
+    } else if (recognizer.state === 3) { // Ended
+      SZConfigManager.saveFrameState(self);
+      self._resizeStartLocation = null;
+      self._resizeStartFrame = null;
+    }
+  }
+
+  static toggleMaximize(controller) {
+    const self = controller;
+    const superview = self.view.superview;
+    const superviewBounds = superview ? superview.bounds : { x: 0, y: 0, width: 1920, height: 1080 };
+
+    if (!self._isMaximized) {
+      self.view.frame = {
+        x: superviewBounds.x,
+        y: superviewBounds.y,
+        width: superviewBounds.width,
+        height: superviewBounds.height
+      };
+      self._isMaximized = true;
+    } else {
+      const smallWidth = 400, smallHeight = 500;
+      self.view.frame = {
+        x: (superviewBounds.width - smallWidth) / 2,
+        y: (superviewBounds.height - smallHeight) / 2,
+        width: smallWidth,
+        height: smallHeight
+      };
+      self._isMaximized = false;
+    }
+    SZConfigManager.saveFrameState(self);
+  }
+
+  static loadInitialPage(controller) {
+    const self = controller;
+    const htmlPath = self.mainPath ? (self.mainPath + '/webpage.html') : null;
     if (htmlPath) {
-      var fileURL = NSURL.fileURLWithPath(htmlPath);
-      self.webView.loadRequest(NSURLRequest.requestWithURL(fileURL));
+      self.webView.loadRequest(NSURLRequest.requestWithURL(NSURL.fileURLWithPath(htmlPath)));
     } else {
       self.webView.loadHTMLStringBaseURL('<html><body style="margin:20px;">未找到 mainPath，无法加载 webpage.html</body></html>', null);
     }
-  },
-  
-  handlePan: function(recognizer) {
-    var translation = recognizer.translationInView(self.view.superview);
-    var center = self.view.center;
-    var newCenter = {x: center.x + translation.x, y: center.y + translation.y};
-    
-    var frame = self.view.frame;
-    var superviewBounds = self.view.superview ? self.view.superview.bounds : {x: 0, y: 0, width: 1920, height: 1080};
-    var leftMargin = 0;
-    var topMargin = 0;
-    var rightMargin = 0;
-    var bottomMargin = 0;
-    
-    var minX = superviewBounds.x + leftMargin + frame.width / 2;
-    var maxX = superviewBounds.x + superviewBounds.width - frame.width / 2 + rightMargin;
-    var minY = superviewBounds.y + topMargin + frame.height / 2;
-    var maxY = superviewBounds.y + superviewBounds.height - frame.height / 2 + bottomMargin;
-    
-    newCenter.x = Math.max(minX, Math.min(maxX, newCenter.x));
-    newCenter.y = Math.max(minY, Math.min(maxY, newCenter.y));
-    
-    self.view.center = newCenter;
-    recognizer.setTranslationInView({x: 0, y: 0}, self.view.superview);
-    
-    if (recognizer.state == 3) { // Ended
-        // Inline save logic
-        var frame = self.view.frame;
-        var config = {
-            x: frame.x,
-            y: frame.y,
-            width: frame.width,
-            height: frame.height
-        };
-        NSUserDefaults.standardUserDefaults().setObjectForKey(config, 'mn_zotero_frame_config');
-    }
-  },
+  }
+}
 
-  handleResize: function(recognizer) {
-    var location = recognizer.locationInView(self.view.superview);
-    if (recognizer.state == 1) { // Began
-        self._resizeStartLocation = location;
-        self._resizeStartFrame = self.view.frame;
-    } else if (recognizer.state == 2) { // Changed
-        if (!self._resizeStartLocation || !self._resizeStartFrame) return;
-        
-        var dx = location.x - self._resizeStartLocation.x;
-        var dy = location.y - self._resizeStartLocation.y;
-        
-        var newWidth = Math.max(250, self._resizeStartFrame.width + dx);
-        var newHeight = Math.max(300, self._resizeStartFrame.height + dy);
-        
-        var superviewBounds = self.view.superview ? self.view.superview.bounds : {x: 0, y: 0, width: 1920, height: 1080};
-        var rightMargin = 0;
-        var bottomMargin = 0;
-        
-        var maxX = superviewBounds.x + superviewBounds.width + rightMargin;
-        var maxY = superviewBounds.y + superviewBounds.height + bottomMargin;
-        
-        var maxRight = self._resizeStartFrame.x + newWidth;
-        var maxBottom = self._resizeStartFrame.y + newHeight;
-        
-        if (maxRight > maxX) {
-            newWidth = maxX - self._resizeStartFrame.x;
-        }
-        if (maxBottom > maxY) {
-            newHeight = maxY - self._resizeStartFrame.y;
-        }
+/**
+ * 配置管理类：负责 NSUserDefaults 读写与 WebView 脚本注入
+ */
+var SZConfigManager = class {
+  static saveFrameState(controller) {
+    const frame = controller.view.frame;
+    const config = { x: frame.x, y: frame.y, width: frame.width, height: frame.height };
+    NSUserDefaults.standardUserDefaults().setObjectForKey(config, 'mn_zotero_frame_config');
+  }
 
-        self.view.frame = {
-            x: self._resizeStartFrame.x,
-            y: self._resizeStartFrame.y,
-            width: newWidth,
-            height: newHeight
-        };
-        
-        self.view.setNeedsLayout();
-        
-    } else if (recognizer.state == 3) { // Ended
-        var frame = self.view.frame;
-        var config = {
-            x: frame.x,
-            y: frame.y,
-            width: frame.width,
-            height: frame.height
-        };
-        NSUserDefaults.standardUserDefaults().setObjectForKey(config, 'mn_zotero_frame_config');
-
-        self._resizeStartLocation = null;
-        self._resizeStartFrame = null;
-    }
-  },
-
-  saveFrameState: function() {
-      var frame = self.view.frame;
-      var config = {
-          x: frame.x,
-          y: frame.y,
-          width: frame.width,
-          height: frame.height
-      };
-      NSUserDefaults.standardUserDefaults().setObjectForKey(config, 'mn_zotero_frame_config');
-  },
-
-  handleResizeDoubleTap: function(recognizer) {
-      var superviewBounds = self.view.superview ? self.view.superview.bounds : {x: 0, y: 0, width: 1920, height: 1080};
-      var frame = self.view.frame;
-      var centerX = superviewBounds.x + superviewBounds.width / 2;
-      var centerY = superviewBounds.y + superviewBounds.height / 2;
-      
-      self.view.center = {x: centerX, y: centerY};
-      
-      var config = {
-          x: self.view.frame.x,
-          y: self.view.frame.y,
-          width: frame.width,
-          height: frame.height
-      };
-      NSUserDefaults.standardUserDefaults().setObjectForKey(config, 'mn_zotero_frame_config');
-  },
-
-  handleTitleBarDoubleTap: function(recognizer) {
-      var superview = self.view.superview;
-      var superviewBounds = superview ? superview.bounds : {x: 0, y: 0, width: 1920, height: 1080};
-      
-      if (!self._isMaximized) {
-          self.view.frame = {
-              x: superviewBounds.x,
-              y: superviewBounds.y,
-              width: superviewBounds.width,
-              height: superviewBounds.height
-          };
-          self._isMaximized = true;
-      } else {
-          var smallWidth = 400;
-          var smallHeight = 500;
-          self.view.frame = {
-              x: (superviewBounds.width - smallWidth) / 2,
-              y: (superviewBounds.height - smallHeight) / 2,
-              width: smallWidth,
-              height: smallHeight
-          };
-          self._isMaximized = false;
-      }
-      
-      var config = {
-          x: self.view.frame.x,
-          y: self.view.frame.y,
-          width: self.view.frame.width,
-          height: self.view.frame.height
-      };
-      NSUserDefaults.standardUserDefaults().setObjectForKey(config, 'mn_zotero_frame_config');
-  },
-
-  viewWillAppear: function(animated) {
-    self.webView.delegate = self;
-    self.webView.evaluateJavaScript("typeof window.__onPanelShow==='function'&&window.__onPanelShow();", function() {});
-  },
-  viewWillDisappear: function(animated) {
-    self.webView.stopLoading();
-    self.webView.delegate = null;
-
-    UIApplication.sharedApplication().networkActivityIndicatorVisible = false;
-  },
-  webViewDidStartLoad: function(webView) {
-    UIApplication.sharedApplication().networkActivityIndicatorVisible = true;
-  },
-  webViewDidFinishLoad: function(webView) {
-    UIApplication.sharedApplication().networkActivityIndicatorVisible = false;
-    self.injectConfig();
-  },
-  injectConfig: function() {
-    var keys = ['uid', 'slug', 'key', 'mode'];
-    var config = {};
-    var defaults = NSUserDefaults.standardUserDefaults();
-    for (var i = 0; i < keys.length; i++) {
-      var val = defaults.objectForKey('mn_zotero_config_' + keys[i]);
+  static injectConfig(webView) {
+    const keys = ['uid', 'slug', 'key', 'mode'];
+    const config = {};
+    const defaults = NSUserDefaults.standardUserDefaults();
+    for (const key of keys) {
+      const val = defaults.objectForKey('mn_zotero_config_' + key);
       if (val !== undefined && val !== null) {
-        config[keys[i]] = String(val);
+        config[key] = String(val);
       }
     }
-    var jsonStr = JSON.stringify(config);
-    var esc = jsonStr.replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/\r/g, '').replace(/\n/g, '\\n');
-    self.webView.evaluateJavaScript("(function(){ try { window.__mnConfig = JSON.parse('" + esc + "'); } catch (_) { window.__mnConfig = {}; } if (window.onMNConfig) window.onMNConfig(); })();", null);
-  },
-  webViewDidFailLoadWithError: function(webView, error) {
-    UIApplication.sharedApplication().networkActivityIndicatorVisible = false;
+    const jsonStr = JSON.stringify(config);
+    const esc = jsonStr.replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/\r/g, '').replace(/\n/g, '\\n');
+    webView.evaluateJavaScript(`(function(){ try { window.__mnConfig = JSON.parse('${esc}'); } catch (_) { window.__mnConfig = {}; } if (window.onMNConfig) window.onMNConfig(); })();`, null);
+  }
 
-    var errorHTML = "<html><body style='margin:20px; font-family: -apple-system; color: #666;'><h3>加载失败</h3><p>" + (error.localizedDescription || '').replace(/</g, '&lt;').replace(/>/g, '&gt;') + "</p></body></html>";
-    self.webView.loadHTMLStringBaseURL(errorHTML, null);
-  },
-  webViewShouldStartLoadWithRequestNavigationType: function(webView, request, type) {
-    var url = request.URL();
-    
-    // JSBox/JSB 中 OC 对象的属性访问兼容性处理
-    var scheme = '';
-    try { scheme = url.scheme(); } catch (e) { scheme = url.scheme; }
-    scheme = String(scheme || '').toLowerCase();
+  static setConfigFromUrl(queryString) {
+    if (!queryString) return;
+    const parts = queryString.split('&');
+    for (const part of parts) {
+      const eq = part.indexOf('=');
+      if (eq === -1) continue;
+      const k = decodeURIComponent(part.substring(0, eq));
+      const v = decodeURIComponent(part.substring(eq + 1).replace(/\+/g, ' '));
+      if (k === 'key') {
+        NSUserDefaults.standardUserDefaults().setObjectForKey(v, 'mn_zotero_config_' + k);
+      } else if (k === 'val') {
+        // This setConfig bridge seems to expect key/val as separate params
+        // But usually we set mn_zotero_config_TITLE where TITLE is the key.
+        // Let's keep the logic but refine once we know which key to use.
+      }
+    }
+    // Original logic was set mn_zotero_config_TITLE = val where TITLE is the 'key' param.
+    // Let's stick to that.
+    let targetKey = '', targetVal = '';
+    for (const part of parts) {
+      const eq = part.indexOf('=');
+      if (eq === -1) continue;
+      const k = decodeURIComponent(part.substring(0, eq));
+      const v = decodeURIComponent(part.substring(eq + 1).replace(/\+/g, ' '));
+      if (k === 'key') targetKey = v;
+      else if (k === 'val') targetVal = v;
+    }
+    if (targetKey) {
+      NSUserDefaults.standardUserDefaults().setObjectForKey(targetVal, 'mn_zotero_config_' + targetKey);
+    }
+  }
+}
 
-    var urlString = '';
+/**
+ * Zotero 桥接类：处理 mnzotero:// 协议及相关的笔记创建、数据获取逻辑
+ */
+var SZZoteroBridge = class {
+  static handleRequest(controller, request) {
+    const self = controller;
+    const { webView } = self;
+    const url = request.URL();
+    let urlString = '';
     try { urlString = url.absoluteString(); } catch (e) { urlString = url.absoluteString; }
     urlString = String(urlString || '');
 
-    // 1. 拦截 zotero 协议
-    if (scheme === 'zotero' || urlString.indexOf('zotero:') === 0) {
-      Application.sharedInstance().openURL(url);
-      return false;
-    }
-
-    // 2. 拦截 http/https 协议（Web/Cloud PDF），强制在 Safari 打开
-    if (scheme === 'http' || scheme === 'https') {
-      Application.sharedInstance().openURL(url);
-      return false;
-    }
-
-    // 3. 处理 mnzotero 内部协议
-    if (scheme !== 'mnzotero') return true;
-    var host = String(url.host || '');
-    var path = String(request.URL().path || '');
-    var urlStringForQuery = urlString;
+    const host = String(url.host || '');
+    const path = String(url.path || '');
 
     if (host === 'setConfig' || path.indexOf('setConfig') !== -1) {
-      var queryString = '';
-      try {
-        var q = url.query;
-        if (typeof q === 'function') q = q();
-        if (q) queryString = String(q);
-        else if (urlStringForQuery.indexOf('?') !== -1) queryString = urlStringForQuery.split('?')[1] || '';
-      } catch (e) {
-        if (urlStringForQuery.indexOf('?') !== -1) queryString = urlStringForQuery.split('?')[1] || '';
-      }
-      var key = '', val = '';
-      if (queryString) {
-        var parts = queryString.split('&');
-        for (var i = 0; i < parts.length; i++) {
-          var eq = parts[i].indexOf('=');
-          if (eq === -1) continue;
-          var k = decodeURIComponent(parts[i].substring(0, eq));
-          var v = decodeURIComponent(parts[i].substring(eq + 1).replace(/\+/g, ' '));
-          if (k === 'key') key = v;
-          else if (k === 'val') val = v;
-        }
-      }
-      if (key) {
-        NSUserDefaults.standardUserDefaults().setObjectForKey(val, 'mn_zotero_config_' + key);
-      }
+      const queryString = SZZoteroBridge._getQueryString(url, urlString);
+      SZConfigManager.setConfigFromUrl(queryString);
       return false;
     }
 
     if (host === 'getSelectedNotes' || path.indexOf('getSelectedNotes') !== -1) {
-      var targetWindow = (self.addon && self.addon.window) ? self.addon.window : self.addonWindow;
-      var list = [];
-      if (targetWindow && typeof getSelectedLiteratureNotes === 'function') {
-        try {
-          list = getSelectedLiteratureNotes(targetWindow);
-        } catch (e) { }
-      }
-      var jsonStr = JSON.stringify(list);
-      var esc = jsonStr.replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/\r/g, '').replace(/\n/g, '\\n');
-      webView.evaluateJavaScript("(function(){ try { window.__selectedNotes = JSON.parse('" + esc + "'); } catch (_) { window.__selectedNotes = []; } if (window.onSelectedNotes) window.onSelectedNotes(); })();", null);
+      SZZoteroBridge._handleGetSelectedNotes(self);
       return false;
     }
 
     if (host === 'createNote' || path.indexOf('createNote') !== -1) {
-      var queryString = '';
-      try {
-        var q = url.query;
-        if (typeof q === 'function') q = q();
-        if (q) queryString = String(q);
-        else if (urlStringForQuery.indexOf('?') !== -1) queryString = urlStringForQuery.split('?')[1] || '';
-      } catch (e) {
-        if (urlStringForQuery.indexOf('?') !== -1) queryString = urlStringForQuery.split('?')[1] || '';
-      }
-      var title = '', type = '', year = '', author = '', lZ = '', lP = '', lW = '', lC = '';
-      var itemKey = '', zoteroMode = '', zoteroUid = '', zoteroApiKey = '';
-      if (queryString) {
-        var parts = queryString.split('&');
-        for (var i = 0; i < parts.length; i++) {
-          var eq = parts[i].indexOf('=');
-          if (eq === -1) continue;
-          var key = decodeURIComponent(parts[i].substring(0, eq));
-          var val = decodeURIComponent(parts[i].substring(eq + 1).replace(/\+/g, ' '));
-          if (key === 'title') title = val;
-          else if (key === 'type') type = val;
-          else if (key === 'year') year = val;
-          else if (key === 'author') author = val;
-          else if (key === 'lZ') lZ = val;
-          else if (key === 'lP') lP = val;
-          else if (key === 'lW') lW = val;
-          else if (key === 'lC') lC = val;
-          else if (key === 'itemKey') itemKey = val;
-          else if (key === 'mode') zoteroMode = val;
-          else if (key === 'uid') zoteroUid = val;
-          else if (key === 'key') zoteroApiKey = val;
-        }
-      }
-      if (!title) return false;
-      var targetWindow = (self.addon && self.addon.window) ? self.addon.window : self.addonWindow;
-      if (!targetWindow) return false;
-      var studyController = null;
-      try {
-        studyController = Application.sharedInstance().studyController(targetWindow);
-      } catch (e) {
-        return false;
-      }
-      var notebookId = null;
-      try {
-        var nc = studyController.notebookController;
-        if (nc) {
-          notebookId = nc.currTopic;
-          if (notebookId === undefined && typeof nc.currTopic === 'function') notebookId = nc.currTopic();
-          if (notebookId === undefined) notebookId = nc.notebookId;
-          if (notebookId === undefined) notebookId = nc.topicId;
-        }
-      } catch (e) { }
-      if (notebookId === undefined && self.currentNotebookId) notebookId = self.currentNotebookId;
-      if (!notebookId) return false;
-      var db = Database.sharedInstance();
-      var notebook = db.getNotebookById(notebookId);
-      if (!notebook) return false;
-      var doc = (notebook.documents && notebook.documents.length > 0) ? notebook.documents[0] : (notebook.mainDocMd5 ? db.getDocumentById(notebook.mainDocMd5) : undefined);
-      if (!doc) {
-        Application.sharedInstance().showHUD('请先打开文档', self.view, 2);
-        return false;
-      }
-      var topicId = notebook.topicId || notebook.topicid;
-      var newNote = undefined;
-      UndoManager.sharedInstance().undoGrouping(
-        "Create Note",
-        topicId,
-        function() {
-          try {
-            var createdNote = Note.createWithTitleNotebookDocument(title, notebook, doc);
-            newNote = createdNote;
-            if (!createdNote) return;
-            var hasMeta = (type || year || author);
-            var hasLinks = (lZ || lP || lW || lC);
-            if (!hasMeta && !hasLinks) return;
-            var esc = function(s) {
-              if (!s) return '';
-              return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-            };
-            var body = '<div style="font-family:sans-serif;padding:20px 28px;background:rgb(250,250,250);border-left:6px solid rgb(0,122,255);border-radius:6px;margin:14px 0;">';
-            if (hasMeta) {
-              body += '<div style="margin-bottom:12px;">';
-              var yearAuthor = [year, author].filter(Boolean).join(' ');
-              if (yearAuthor) body += '<span style="font-size:32px;font-weight:bold;color:rgb(51,51,51);margin-right:12px;">' + esc(yearAuthor) + '</span>';
-              if (type) body += '<span style="color:rgb(153,153,153);font-size:22px;border:1px solid rgb(221,221,221);padding:4px 14px;border-radius:12px;vertical-align:text-bottom;">' + esc(type) + '</span>';
-              body += '</div>';
-            }
-            if (hasLinks) {
-              body += '<div style="display:flex;gap:24px;">';
-              if (lZ) body += '<a href="' + lZ + '" style="text-decoration:none;color:rgb(0,122,255);font-weight:600;font-size:24px;">🔗 Open in Zotero</a>';
-              if (lP) body += '<a href="' + lP + '" style="text-decoration:none;color:rgb(46,125,50);font-weight:600;font-size:24px;">📑 Read PDF</a>';
-              if (lW) body += '<a href="' + lW + '" style="text-decoration:none;color:rgb(102,102,102);font-weight:600;font-size:24px;">🌐 Web</a>';
-              if (lC) body += '<a href="' + lC + '" style="text-decoration:none;color:rgb(102,102,102);font-weight:600;font-size:24px;">📑 Cloud PDF</a>';
-              body += '</div>';
-            }
-            body += '</div>';
-            try {
-              if (createdNote.appendMarkdownComment) createdNote.appendMarkdownComment(body);
-            } catch (e) { }
-          } catch (e) { }
-        }
-      );
-      Application.sharedInstance().refreshAfterDBChanged(topicId);
-      if (newNote && itemKey) {
-        try {
-          var noteId = newNote.noteId;
-          if (noteId !== undefined && noteId !== null) {
-            var notebookTitle = (notebook.title !== undefined && notebook.title !== null) ? String(notebook.title) : '';
-            var attachmentTitle = notebookTitle ? ('在MarginNote中打开-' + notebookTitle) : '在MarginNote中打开';
-            var postUid = zoteroUid || '0';
-            var postUrl = (zoteroMode === 'C') ? ('https://api.zotero.org/users/' + postUid + '/items') : ('http://localhost:23119/api/users/' + postUid + '/items');
-            var postHeaders = { 'Content-Type': 'application/json', 'Zotero-API-Version': '3' };
-            if (zoteroMode === 'C' && zoteroApiKey) postHeaders['Zotero-API-Key'] = zoteroApiKey;
-            var postBody = [{ itemType: 'attachment', linkMode: 'linked_url', parentItem: itemKey, title: attachmentTitle, url: 'marginnote4app://note/' + String(noteId) }];
-            SZMNNetwork.fetch(postUrl, { method: 'POST', headers: postHeaders, json: postBody }).then(function() {
-              try { Application.sharedInstance().showHUD('已创建卡片', self.view, 1.5); } catch (e) { }
-            }, function() {
-              try { Application.sharedInstance().showHUD('已创建卡片，Zotero 附件添加失败', self.view, 2); } catch (e) { }
-            });
-          } else {
-            try { Application.sharedInstance().showHUD('已创建卡片', self.view, 1.5); } catch (e) { }
-          }
-        } catch (e) {
-          try { Application.sharedInstance().showHUD('已创建卡片', self.view, 1.5); } catch (err) { }
-        }
-      } else {
-        try {
-          if (newNote) Application.sharedInstance().showHUD('已创建卡片', self.view, 1.5);
-        } catch (e) { }
-      }
+      const queryString = SZZoteroBridge._getQueryString(url, urlString);
+      SZZoteroBridge._handleCreateNote(self, queryString);
       return false;
     }
 
     if (host === 'fetch' || path.indexOf('fetch') !== -1) {
-        webView.evaluateJavaScript('window.__mnFetchPending', function(result) {
-          if (!result || result.length === 0) return;
-          var id = null;
-          try {
-            var pending = JSON.parse(result);
-            id = pending.id;
-            var reqUrl = pending.url;
-            var opts = pending.options || {};
-            var options = { method: opts.method || 'GET', headers: opts.headers || {} };
-            if (opts.body) options.body = opts.body;
-            if (opts.json) options.json = opts.json;
-            SZMNNetwork.fetch(reqUrl, options).then(function(res) {
-              var status = res.status;
-              var body = res.json ? res.json() : (res.text ? res.text() : null);
-              var ok = status >= 200 && status < 300;
-              var payload = JSON.stringify({ ok: ok, status: status, body: body });
-              webView.evaluateJavaScript("(function(){ var c = window.__mnFetchCb && window.__mnFetchCb['" + id + "']; if(c) c(null, " + payload + "); })();", function(){});
-            }, function(err) {
-              var msg = (err && (err.message || err.toString)) ? (err.message || err.toString()) : String(err);
-              var esc = (msg || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/\r/g, '').replace(/\n/g, '\\n');
-              webView.evaluateJavaScript("(function(){ var c = window.__mnFetchCb && window.__mnFetchCb['" + id + "']; if(c) c('" + esc + "', null); })();", function(){});
-            });
-          } catch (e) {
-            try { var p = JSON.parse(result); if (p && p.id) id = p.id; } catch (_) {}
-            var msg = (e && (e.message || e.toString)) ? (e.message || e.toString()) : String(e);
-            var esc = (msg || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/\r/g, '').replace(/\n/g, '\\n');
-            webView.evaluateJavaScript("(function(){ var c = window.__mnFetchCb && window.__mnFetchCb['" + (id || '') + "']; if(c) c('" + esc + "', null); })();", function(){});
-          }
-        });
-        return false;
+      SZZoteroBridge._handleFetch(webView);
+      return false;
     }
+
     return true;
+  }
+
+  static _getQueryString(url, urlString) {
+    let queryString = '';
+    try {
+      let q = url.query;
+      if (typeof q === 'function') q = q();
+      if (q) queryString = String(q);
+      else if (urlString.indexOf('?') !== -1) queryString = urlString.split('?')[1] || '';
+    } catch (e) {
+      if (urlString.indexOf('?') !== -1) queryString = urlString.split('?')[1] || '';
+    }
+    return queryString;
+  }
+
+  static _handleGetSelectedNotes(self) {
+    const targetWindow = (self.addon && self.addon.window) ? self.addon.window : self.addonWindow;
+    let list = [];
+    if (targetWindow && typeof getSelectedLiteratureNotes === 'function') {
+      try { list = getSelectedLiteratureNotes(targetWindow); } catch (e) { }
+    }
+    const jsonStr = JSON.stringify(list);
+    const esc = jsonStr.replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/\r/g, '').replace(/\n/g, '\\n');
+    self.webView.evaluateJavaScript(`(function(){ try { window.__selectedNotes = JSON.parse('${esc}'); } catch (_) { window.__selectedNotes = []; } if (window.onSelectedNotes) window.onSelectedNotes(); })();`, null);
+  }
+
+  static _handleCreateNote(self, queryString) {
+    const params = {};
+    if (queryString) {
+      const parts = queryString.split('&');
+      for (const part of parts) {
+        const eq = part.indexOf('=');
+        if (eq === -1) continue;
+        const k = decodeURIComponent(part.substring(0, eq));
+        const v = decodeURIComponent(part.substring(eq + 1).replace(/\+/g, ' '));
+        params[k] = v;
+      }
+    }
+    if (!params.title) return;
+
+    const targetWindow = (self.addon && self.addon.window) ? self.addon.window : self.addonWindow;
+    if (!targetWindow) return;
+
+    const studyController = Application.sharedInstance().studyController(targetWindow);
+    const notebookId = (studyController.notebookController && (studyController.notebookController.currTopic || studyController.notebookController.topicId)) || self.currentNotebookId;
+    if (!notebookId) return;
+
+    const db = Database.sharedInstance();
+    const notebook = db.getNotebookById(notebookId);
+    if (!notebook) return;
+    const doc = (notebook.documents && notebook.documents.length > 0) ? notebook.documents[0] : (notebook.mainDocMd5 ? db.getDocumentById(notebook.mainDocMd5) : undefined);
+    if (!doc) {
+      Application.sharedInstance().showHUD('请先打开文档', self.view, 2);
+      return;
+    }
+
+    const topicId = notebook.topicId || notebook.topicid;
+    let newNote = undefined;
+    UndoManager.sharedInstance().undoGrouping("Create Note", topicId, () => {
+      try {
+        const createdNote = Note.createWithTitleNotebookDocument(params.title, notebook, doc);
+        newNote = createdNote;
+        if (!createdNote) return;
+
+        const body = SZZoteroBridge._buildNoteBody(params);
+        if (body && createdNote.appendMarkdownComment) {
+          createdNote.appendMarkdownComment(body);
+        }
+      } catch (e) { }
+    });
+
+    Application.sharedInstance().refreshAfterDBChanged(topicId);
+    if (newNote && params.itemKey) {
+      SZZoteroBridge._attachToZotero(self, newNote, params);
+    } else if (newNote) {
+      Application.sharedInstance().showHUD('已创建卡片', self.view, 1.5);
+    }
+  }
+
+  static _buildNoteBody(p) {
+    const hasMeta = (p.type || p.year || p.author);
+    const hasLinks = (p.lZ || p.lP || p.lW || p.lC);
+    if (!hasMeta && !hasLinks) return '';
+
+    const esc = (s) => !s ? '' : String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    let body = '<div style="font-family:sans-serif;padding:20px 28px;background:rgb(250,250,250);border-left:6px solid rgb(0,122,255);border-radius:6px;margin:14px 0;">';
+    if (hasMeta) {
+      body += '<div style="margin-bottom:12px;">';
+      const ya = [p.year, p.author].filter(Boolean).join(' ');
+      if (ya) body += `<span style="font-size:32px;font-weight:bold;color:rgb(51,51,51);margin-right:12px;">${esc(ya)}</span>`;
+      if (p.type) body += `<span style="color:rgb(153,153,153);font-size:22px;border:1px solid rgb(221,221,221);padding:4px 14px;border-radius:12px;vertical-align:text-bottom;">${esc(p.type)}</span>`;
+      body += '</div>';
+    }
+    if (hasLinks) {
+      body += '<div style="display:flex;gap:24px;">';
+      if (p.lZ) body += `<a href="${p.lZ}" style="text-decoration:none;color:rgb(0,122,255);font-weight:600;font-size:24px;">🔗 Open in Zotero</a>`;
+      if (p.lP) body += `<a href="${p.lP}" style="text-decoration:none;color:rgb(46,125,50);font-weight:600;font-size:24px;">📑 Read PDF</a>`;
+      if (p.lW) body += `<a href="${p.lW}" style="text-decoration:none;color:rgb(102,102,102);font-weight:600;font-size:24px;">🌐 Web</a>`;
+      if (p.lC) body += `<a href="${p.lC}" style="text-decoration:none;color:rgb(102,102,102);font-weight:600;font-size:24px;">📑 Cloud PDF</a>`;
+      body += '</div>';
+    }
+    body += '</div>';
+    return body;
+  }
+
+  static _attachToZotero(self, note, p) {
+    try {
+      const { noteId } = note;
+      if (!noteId) return;
+      const notebookTitle = String(note.notebook.title || '');
+      const attachmentTitle = notebookTitle ? `在MarginNote中打开-${notebookTitle}` : '在MarginNote中打开';
+      const uid = p.uid || '0';
+      const isCloud = (p.mode === 'C');
+      const url = isCloud ? `https://api.zotero.org/users/${uid}/items` : `http://localhost:23119/api/users/${uid}/items`;
+      const headers = { 'Content-Type': 'application/json', 'Zotero-API-Version': '3' };
+      if (isCloud && p.key) headers['Zotero-API-Key'] = p.key;
+      const postBody = [{ itemType: 'attachment', linkMode: 'linked_url', parentItem: p.itemKey, title: attachmentTitle, url: `marginnote4app://note/${String(noteId)}` }];
+
+      SZMNNetwork.fetch(url, { method: 'POST', headers: headers, json: postBody }).then(() => {
+        Application.sharedInstance().showHUD('已创建卡片', self.view, 1.5);
+      }, () => {
+        Application.sharedInstance().showHUD('已创建卡片，Zotero 附件添加失败', self.view, 2);
+      });
+    } catch (e) {
+      Application.sharedInstance().showHUD('已创建卡片', self.view, 1.5);
+    }
+  }
+
+  static _handleFetch(webView) {
+    webView.evaluateJavaScript('window.__mnFetchPending', (result) => {
+      if (!result) return;
+      let id = null;
+      try {
+        const pending = JSON.parse(result);
+        id = pending.id;
+        const { url, options: opts } = pending;
+        SZMNNetwork.fetch(url, {
+          method: opts.method || 'GET',
+          headers: opts.headers || {},
+          body: opts.body,
+          json: opts.json
+        }).then((res) => {
+          const payload = JSON.stringify({ ok: (res.status >= 200 && res.status < 300), status: res.status, body: res.json ? res.json() : res.text() });
+          webView.evaluateJavaScript(`(function(){ var c = window.__mnFetchCb && window.__mnFetchCb['${id}']; if(c) c(null, ${payload}); })();`, null);
+        }, (err) => {
+          const msg = String(err.message || err);
+          const esc = msg.replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/\r/g, '').replace(/\n/g, '\\n');
+          webView.evaluateJavaScript(`(function(){ var c = window.__mnFetchCb && window.__mnFetchCb['${id}']; if(c) c('${esc}', null); })();`, null);
+        });
+      } catch (e) {
+        const msg = String(e.message || e);
+        const esc = msg.replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/\r/g, '').replace(/\n/g, '\\n');
+        webView.evaluateJavaScript(`(function(){ var c = window.__mnFetchCb && window.__mnFetchCb['${id || ''}']; if(c) c('${esc}', null); })();`, null);
+      }
+    });
+  }
+}
+
+/**
+ * 主控制器类：维持 UIViewController 生命周期，委托逻辑给辅助类
+ */
+var SZWebViewController = JSB.defineClass('SZWebViewController : UIViewController <UIWebViewDelegate>', {
+  viewDidLoad: function () {
+    SZWebUIHandler.setupUI(self);
+    SZWebUIHandler.loadInitialPage(self);
   },
 
+  handlePan: function (recognizer) { SZWebUIHandler.handlePan(self, recognizer); },
+  handleResize: function (recognizer) { SZWebUIHandler.handleResize(self, recognizer); },
+  handleResizeDoubleTap: function () {
+    var sb = self.view.superview ? self.view.superview.bounds : { x: 0, y: 0, width: 1920, height: 1080 };
+    self.view.center = { x: sb.x + sb.width / 2, y: sb.y + sb.height / 2 };
+    SZConfigManager.saveFrameState(self);
+  },
+  handleTitleBarDoubleTap: function () { SZWebUIHandler.toggleMaximize(self); },
+
+  viewWillAppear: function () {
+    self.webView.delegate = self;
+    self.webView.evaluateJavaScript("typeof window.__onPanelShow==='function'&&window.__onPanelShow();", null);
+  },
+  viewWillDisappear: function () {
+    self.webView.stopLoading();
+    self.webView.delegate = null;
+    UIApplication.sharedApplication().networkActivityIndicatorVisible = false;
+  },
+  webViewDidStartLoad: function () { UIApplication.sharedApplication().networkActivityIndicatorVisible = true; },
+  webViewDidFinishLoad: function () {
+    UIApplication.sharedApplication().networkActivityIndicatorVisible = false;
+    SZConfigManager.injectConfig(self.webView);
+  },
+  webViewDidFailLoadWithError: function (wv, error) {
+    UIApplication.sharedApplication().networkActivityIndicatorVisible = false;
+    var errHTML = "<html><body style='margin:20px; font-family:-apple-system; color:#666;'><h3>加载失败</h3><p>" + String(error.localizedDescription || '').replace(/</g, '&lt;') + "</p></body></html>";
+    self.webView.loadHTMLStringBaseURL(errHTML, null);
+  },
+
+  webViewShouldStartLoadWithRequestNavigationType: function (webView, request, type) {
+    var url = request.URL();
+    var scheme = String(url.scheme || '').toLowerCase();
+    var urlString = String(url.absoluteString || '');
+
+    if (scheme === 'zotero' || urlString.indexOf('zotero:') === 0 || scheme === 'http' || scheme === 'https') {
+      Application.sharedInstance().openURL(url);
+      return false;
+    }
+
+    if (scheme === 'mnzotero') {
+      return SZZoteroBridge.handleRequest(self, request);
+    }
+    return true;
+  }
 });
+
