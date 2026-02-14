@@ -361,15 +361,17 @@ var SZZoteroBridge = class {
     });
 
     Application.sharedInstance().refreshAfterDBChanged(topicId);
-    if (newNote && params.itemKey) {
-      if (studyController && studyController.focusNoteInMindMapById) {
+
+    // Delayed focus to allow UI to update
+    if (newNote && studyController && studyController.focusNoteInMindMapById) {
+      NSTimer.scheduledTimerWithTimeInterval(0.5, false, function () {
         studyController.focusNoteInMindMapById(newNote.noteId);
-      }
+      });
+    }
+
+    if (newNote && params.itemKey) {
       SZZoteroBridge._attachToZotero(self, newNote, params);
     } else if (newNote) {
-      if (studyController && studyController.focusNoteInMindMapById) {
-        studyController.focusNoteInMindMapById(newNote.noteId);
-      }
       Application.sharedInstance().showHUD('已创建卡片', self.view, 1.5);
     }
   }
