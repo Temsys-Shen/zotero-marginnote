@@ -728,36 +728,60 @@
       var opts = document.querySelectorAll('.mode-option');
       var modeInput = $('mode');
       
-      // Load saved values
-      ['uid', 'slug', 'key', 'mode'].forEach(id => {
-        const val = localStorage.getItem('zotero_' + id);
-        if (val) $(id).value = val;
-      });
+      function setConfig(key, val) {
+        var iframe = document.createElement('iframe');
+        iframe.style.display = 'none';
+        iframe.src = 'mnzotero://setConfig?key=' + encodeURIComponent(key) + '&val=' + encodeURIComponent(val);
+        document.body.appendChild(iframe);
+        setTimeout(function () { try { iframe.remove(); } catch (e) { } }, 500);
+      }
 
-      // Save changes automatically; reset filter options when uid/slug/key change
+      function loadConfig(config) {
+        if (!config) return;
+        ['uid', 'slug', 'key', 'mode'].forEach(id => {
+          if (config[id] !== undefined) {
+            $(id).value = config[id];
+            if (id === 'mode') {
+              opts.forEach(function (o) {
+                if (o.getAttribute('data-value') === config[id]) o.classList.add('active');
+                else o.classList.remove('active');
+              });
+            }
+          }
+        });
+        upd();
+      }
+
+      // Initial load from injected config if present
+      if (window.__mnConfig) {
+        loadConfig(window.__mnConfig);
+      }
+
+      // Listener for late injection
+      window.onMNConfig = function() {
+        loadConfig(window.__mnConfig);
+      };
+
+      // Save changes automatically via protocol
       ['uid', 'slug', 'key'].forEach(id => {
         $(id).addEventListener('input', function() {
-          localStorage.setItem('zotero_' + id, this.value);
+          setConfig(id, this.value);
           resetFilterOptions();
           loadFilters();
         });
       });
 
-      opts.forEach(function (o) {
-        if (o.getAttribute('data-value') === modeInput.value) o.classList.add('active');
-        else o.classList.remove('active');
-      });
       opts.forEach(function (el) {
         el.addEventListener('click', function () {
           var v = this.getAttribute('data-value');
           modeInput.value = v;
-          localStorage.setItem('zotero_mode', v); // Save mode change
+          setConfig('mode', v);
           opts.forEach(function (o) { o.classList.remove('active'); });
           this.classList.add('active');
           upd();
         });
       });
-      upd();
+
       var colSelect = $('filter-collection');
       var tagSelect = $('filter-tag');
       if (colSelect) colSelect.addEventListener('change', function () { this.blur(); });

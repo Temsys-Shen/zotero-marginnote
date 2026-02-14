@@ -274,6 +274,21 @@ var SZWebViewController = JSB.defineClass('SZWebViewController : UIViewControlle
   },
   webViewDidFinishLoad: function(webView) {
     UIApplication.sharedApplication().networkActivityIndicatorVisible = false;
+    self.injectConfig();
+  },
+  injectConfig: function() {
+    var keys = ['uid', 'slug', 'key', 'mode'];
+    var config = {};
+    var defaults = NSUserDefaults.standardUserDefaults();
+    for (var i = 0; i < keys.length; i++) {
+      var val = defaults.objectForKey('mn_zotero_config_' + keys[i]);
+      if (val !== undefined && val !== null) {
+        config[keys[i]] = String(val);
+      }
+    }
+    var jsonStr = JSON.stringify(config);
+    var esc = jsonStr.replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/\r/g, '').replace(/\n/g, '\\n');
+    self.webView.evaluateJavaScript("(function(){ try { window.__mnConfig = JSON.parse('" + esc + "'); } catch (_) { window.__mnConfig = {}; } if (window.onMNConfig) window.onMNConfig(); })();", null);
   },
   webViewDidFailLoadWithError: function(webView, error) {
     UIApplication.sharedApplication().networkActivityIndicatorVisible = false;
@@ -310,6 +325,34 @@ var SZWebViewController = JSB.defineClass('SZWebViewController : UIViewControlle
     var host = String(url.host || '');
     var path = String(request.URL().path || '');
     var urlStringForQuery = urlString;
+
+    if (host === 'setConfig' || path.indexOf('setConfig') !== -1) {
+      var queryString = '';
+      try {
+        var q = url.query;
+        if (typeof q === 'function') q = q();
+        if (q) queryString = String(q);
+        else if (urlStringForQuery.indexOf('?') !== -1) queryString = urlStringForQuery.split('?')[1] || '';
+      } catch (e) {
+        if (urlStringForQuery.indexOf('?') !== -1) queryString = urlStringForQuery.split('?')[1] || '';
+      }
+      var key = '', val = '';
+      if (queryString) {
+        var parts = queryString.split('&');
+        for (var i = 0; i < parts.length; i++) {
+          var eq = parts[i].indexOf('=');
+          if (eq === -1) continue;
+          var k = decodeURIComponent(parts[i].substring(0, eq));
+          var v = decodeURIComponent(parts[i].substring(eq + 1).replace(/\+/g, ' '));
+          if (k === 'key') key = v;
+          else if (k === 'val') val = v;
+        }
+      }
+      if (key) {
+        NSUserDefaults.standardUserDefaults().setObjectForKey(val, 'mn_zotero_config_' + key);
+      }
+      return false;
+    }
 
     if (host === 'getSelectedNotes' || path.indexOf('getSelectedNotes') !== -1) {
       var targetWindow = (self.addon && self.addon.window) ? self.addon.window : self.addonWindow;

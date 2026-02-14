@@ -2,3 +2,4 @@ node_modules
 *.mnaddon
 .trae/**
 .cursor/**
+.agent/**
