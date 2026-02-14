@@ -383,29 +383,16 @@ var SZZoteroBridge = class {
   }
 
   static _buildNoteBody(p) {
-    const hasMeta = (p.type || p.year || p.author);
-    const hasLinks = (p.lZ || p.lP || p.lW || p.lC);
-    if (!hasMeta && !hasLinks) return '';
-
     const esc = (s) => !s ? '' : String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-    let body = '<div style="font-family:sans-serif;padding:20px 28px;background:rgb(250,250,250);border-left:6px solid rgb(0,122,255);border-radius:6px;margin:14px 0;">';
-    if (hasMeta) {
-      body += '<div style="margin-bottom:12px;">';
-      const ya = [p.year, p.author].filter(Boolean).join(' ');
-      if (ya) body += `<span style="font-size:32px;font-weight:bold;color:rgb(51,51,51);margin-right:12px;">${esc(ya)}</span>`;
-      if (p.type) body += `<span style="color:rgb(153,153,153);font-size:22px;border:1px solid rgb(221,221,221);padding:4px 14px;border-radius:12px;vertical-align:text-bottom;">${esc(p.type)}</span>`;
-      body += '</div>';
-    }
-    if (hasLinks) {
-      body += '<div style="display:flex;gap:24px;">';
-      if (p.lZ) body += `<a href="${p.lZ}" style="text-decoration:none;color:rgb(0,122,255);font-weight:600;font-size:24px;">🔗 Open in Zotero</a>`;
-      if (p.lP) body += `<a href="${p.lP}" style="text-decoration:none;color:rgb(46,125,50);font-weight:600;font-size:24px;">📑 Read PDF</a>`;
-      if (p.lW) body += `<a href="${p.lW}" style="text-decoration:none;color:rgb(102,102,102);font-weight:600;font-size:24px;">🌐 Web</a>`;
-      if (p.lC) body += `<a href="${p.lC}" style="text-decoration:none;color:rgb(102,102,102);font-weight:600;font-size:24px;">📑 Cloud PDF</a>`;
-      body += '</div>';
-    }
-    body += '</div>';
-    return body;
+    const ya = [p.year, p.author].filter(Boolean).map(esc).join(' ');
+    const type = esc(p.type);
+    let l = '';
+    if (p.lZ) l += `<a href="${p.lZ}" z>🔗 Open in Zotero</a>`;
+    if (p.lP) l += `<a href="${p.lP}" z style="color:#2a3">📑 Read PDF</a>`;
+    if (p.lW) l += `<a href="${p.lW}" z style="color:#f90">🌐 Web</a>`;
+    if (p.lC) l += `<a href="${p.lC}" z style="color:#96f">📑 Cloud PDF</a>`;
+    if (!ya && !type && !l) return '';
+    return `<style>a[z]{color:#07f;text-decoration:none;font-weight:bolder}</style><div style="border-left:solid #07f .1875em;background:#fe;margin:.75em 0;padding:.125em .25em">${ya ? `<span style="color:#333;font:1.125em sans-serif">${ya}</span>` : ''}${type ? ` <span style="color:#999;font:1em sans-serif;border:solid #ddd .0625em;padding:.125em .5em;border-radius:.375em;vertical-align:text-bottom">${type}</span>` : ''}${l ? `<div style="display:flex;gap:.875em;margin-top:.375em">${l}</div>` : ''}</div>`;
   }
 
   static _attachToZotero(self, note, p) {
