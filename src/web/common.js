@@ -60,6 +60,12 @@ function upd() {
         if (el) {
             el.addEventListener('input', function () {
                 setConfig(id, this.value);
+
+                // Visual feedback
+                this.classList.remove('save-success');
+                void this.offsetWidth; // Trigger reflow
+                this.classList.add('save-success');
+
                 if (window.resetFilterOptions) window.resetFilterOptions();
                 if (window.loadFilters) window.loadFilters();
             });

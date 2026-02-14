@@ -362,8 +362,14 @@ var SZZoteroBridge = class {
 
     Application.sharedInstance().refreshAfterDBChanged(topicId);
     if (newNote && params.itemKey) {
+      if (studyController && studyController.focusNoteInMindMapById) {
+        studyController.focusNoteInMindMapById(newNote.noteId);
+      }
       SZZoteroBridge._attachToZotero(self, newNote, params);
     } else if (newNote) {
+      if (studyController && studyController.focusNoteInMindMapById) {
+        studyController.focusNoteInMindMapById(newNote.noteId);
+      }
       Application.sharedInstance().showHUD('已创建卡片', self.view, 1.5);
     }
   }

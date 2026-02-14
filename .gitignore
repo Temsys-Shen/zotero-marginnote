@@ -3,4 +3,5 @@ node_modules
 .trae
 .cursor
 .agent
+.pnpm-store
 dist
