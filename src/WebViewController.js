@@ -1,6 +1,3 @@
-JSB.require('network');
-JSB.require('SelectedNotesHelper');
-
 /**
  * UI 交互协调类：负责视图初始化、拖拽拖动、缩放、最大化等逻辑
  */

@@ -1,5 +1,3 @@
-JSB.require('base64');
-
 class SZResponse {
   constructor(data, nsResponse) {
     this.data = data;

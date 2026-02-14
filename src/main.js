@@ -1,6 +1,8 @@
 JSB.newAddon = function (mainPath) {
   JSB.require('WebViewController');
+  JSB.require('network');
   JSB.require('SelectedNotesHelper');
+  JSB.require('base64');
   var newAddonClass = JSB.defineClass('SZSampleWAddon : JSExtension', /*Instance members*/{
     //Window initialize
     sceneWillConnect: function () {
