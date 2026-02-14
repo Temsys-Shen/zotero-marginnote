@@ -184,11 +184,11 @@ var SZWebUIHandler = class {
 
   static loadInitialPage(controller) {
     const self = controller;
-    const htmlPath = self.mainPath ? (self.mainPath + '/webpage.html') : null;
+    const htmlPath = self.mainPath ? (self.mainPath + '/web/index.html') : null;
     if (htmlPath) {
       self.webView.loadRequest(NSURLRequest.requestWithURL(NSURL.fileURLWithPath(htmlPath)));
     } else {
-      self.webView.loadHTMLStringBaseURL('<html><body style="margin:20px;">未找到 mainPath，无法加载 webpage.html</body></html>', null);
+      self.webView.loadHTMLStringBaseURL('<html><body style="margin:20px;">未找到 mainPath，无法加载 index.html</body></html>', null);
     }
   }
 }

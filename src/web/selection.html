@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+    <title>Zotero Connector - Selection</title>
+    <link rel="stylesheet" href="common.css">
+</head>
+
+<body>
+
+    <header>
+        <div class="top-row">
+            <h1>Zotero Connector</h1>
+            <details id="settings-details">
+                <summary>Settings</summary>
+                <div class="config-panel">
+                    <input type="hidden" id="mode" value="L">
+                    <div class="mode-options">
+                        <span class="mode-option active" data-value="L" role="button">Local API</span>
+                        <span class="mode-option" data-value="C" role="button">Cloud API</span>
+                    </div>
+                    <input id="uid" placeholder="UserID" style="display:none">
+                    <input id="slug" placeholder="Username" style="display:none">
+                    <input id="key" type="password" placeholder="API Key" style="display:none">
+                </div>
+            </details>
+        </div>
+
+        <div class="view-switcher">
+            <span class="view-option" data-view="library" role="button">Library</span>
+            <span class="view-option active" data-view="selected" role="button">Selected Cards<span
+                    id="selected-reload-icon" class="selected-reload-icon" style="display: inline;"> ⟳</span></span>
+        </div>
+    </header>
+
+    <div id="selected-panel" class="show">
+        <div id="selected-toolbar" class="selected-toolbar" style="display: none;">
+            <button type="button" id="btn-select-in-zotero">Select in Zotero</button>
+            <button type="button" id="btn-copy-reference" disabled>Copy Reference</button>
+        </div>
+        <div id="selected-empty" class="selected-empty-state">Loading…</div>
+        <div id="selected-list" class="list-container" style="display: none;"></div>
+    </div>
+
+    <script src="common.js"></script>
+    <script>
+        // Panel show hook for selection
+        window.__onPanelShow = function () {
+            loadSelectedNotes();
+        };
+
+        function loadSelectedNotes() {
+            $('selected-empty').style.display = 'block';
+            $('selected-empty').textContent = 'Loading…';
+            $('selected-list').style.display = 'none';
+            $('selected-list').innerHTML = '';
+
+            var iframe = document.createElement('iframe');
+            iframe.style.display = 'none';
+            iframe.src = 'mnzotero://getSelectedNotes';
+            document.body.appendChild(iframe);
+            setTimeout(function () { try { iframe.remove(); } catch (e) { } }, 500);
+        }
+
+        // Auto-load on page load
+        loadSelectedNotes();
+        // Also bind reload icon if desired
+        var reloadIcon = $('selected-reload-icon');
+        if (reloadIcon) reloadIcon.onclick = loadSelectedNotes;
+
+        window.onSelectedNotes = function () {
+            var list = window.__selectedNotes;
+            if (!Array.isArray(list)) list = [];
+            var toolbarEl = $('selected-toolbar');
+            var emptyEl = $('selected-empty');
+            var listEl = $('selected-list');
+            if (list.length === 0) {
+                if (toolbarEl) toolbarEl.style.display = 'none';
+                emptyEl.style.display = 'block';
+                emptyEl.textContent = 'No literature cards in current selection.';
+                listEl.style.display = 'none';
+                listEl.innerHTML = '';
+                return;
+            }
+            if (toolbarEl) toolbarEl.style.display = 'flex';
+            emptyEl.style.display = 'none';
+            listEl.style.display = 'block';
+            var html = list.map(function (item) {
+                var title = (item.title || '').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+                return '<div class="list-item"><div class="list-item-body"><div class="list-title">' + title + '</div></div></div>';
+            }).join('');
+            listEl.innerHTML = html;
+        };
+
+        (function initSelectedToolbar() {
+            var btnSelect = $('btn-select-in-zotero');
+            if (btnSelect) {
+                btnSelect.addEventListener('click', function () {
+                    var list = window.__selectedNotes;
+                    if (!Array.isArray(list) || list.length === 0) return;
+                    var keys = list.map(function (item) { return item.itemKey || ''; }).filter(Boolean);
+                    if (keys.length === 0) return;
+                    var url = 'zotero://select/library/items?itemKey=' + keys.join(',');
+                    var a = document.createElement('a');
+                    a.href = url;
+                    a.style.display = 'none';
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                });
+            }
+        })();
+    </script>
+</body>
+
+</html>

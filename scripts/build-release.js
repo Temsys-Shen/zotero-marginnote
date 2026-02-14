@@ -66,7 +66,18 @@ async function build() {
         }
     }
 
-    // 5. Package as .mnaddon
+    // 5. Minify CSS files
+    const cssFiles = getAllFiles(distDir).filter(f => f.endsWith('.css'));
+    console.log(`🎨 Minifying ${cssFiles.length} CSS files...`);
+    for (const file of cssFiles) {
+        try {
+            execSync(`pnpm exec cleancss -o "${file}" "${file}"`);
+        } catch (e) {
+            console.warn(`⚠️  Warning: Failed to minify ${path.basename(file)}.`);
+        }
+    }
+
+    // 6. Package as .mnaddon
     console.log(`🤐 Packaging to ${outputFilename}...`);
     if (fs.existsSync(outputPath)) {
         try { fs.unlinkSync(outputPath); } catch (e) { }

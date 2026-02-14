@@ -1,0 +1,509 @@
+:root {
+  --bg: #F2F2F7;
+  /* 背景灰 */
+  --surface: #FFFFFF;
+  /* 表面白 */
+  --text: #1C1C1E;
+  /* 深黑 */
+  --sub: #8E8E93;
+  /* 次级灰 */
+  --accent: #007AFF;
+  /* 交互蓝 */
+  --accent-bg: #EBF5FF;
+  /* 浅蓝 */
+  --border: #E5E5EA;
+  /* 分割线 */
+  --green: #34C759;
+  /* 成功/PDF */
+}
+
+/* 全局禁止选择，仅允许输入框 */
+* {
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+
+input, textarea {
+  -webkit-user-select: text;
+  user-select: text;
+  -webkit-touch-callout: default;
+}
+
+/* 1. 全屏重置 - iOS system grouped background */
+html,
+body {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100%;
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
+  background-color: #F2F2F7;
+  color: var(--text);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+/* 2. 顶部固定区域 */
+header {
+  background: var(--surface);
+  padding: 12px 16px;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03);
+  flex-shrink: 0;
+  /* 防止被压缩 */
+  z-index: 10;
+}
+
+.top-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+h1 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+h1::before {
+  content: '';
+  width: 4px;
+  height: 16px;
+  background: var(--accent);
+  border-radius: 2px;
+  display: inline-block;
+}
+
+/* 配置折叠面板 */
+details {
+  font-size: 13px;
+  color: var(--sub);
+  position: relative; /* Anchor for floating panel */
+}
+
+summary {
+  list-style: none;
+  cursor: pointer;
+  user-select: none;
+  text-align: right;
+}
+
+summary:hover {
+  color: var(--accent);
+}
+
+/* Floating Config Panel */
+.config-panel {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  width: 260px;
+  margin-top: 8px;
+  padding: 16px;
+  background: rgba(255, 255, 255, 0.98);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border-radius: 12px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.12), 0 0 0 1px rgba(0,0,0,0.05);
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* 输入控件 */
+input,
+select {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 10px 12px;
+  border: none;
+  background: #EFEFF4; /* iOS input gray */
+  border-radius: 8px;
+  font-size: 13px;
+  outline: none;
+  color: #000;
+  box-shadow: none;
+}
+
+input:focus {
+  background: #fff;
+  box-shadow: 0 0 0 2px var(--accent);
+}
+select:focus {
+  background: #EFEFF4;
+  box-shadow: none;
+}
+
+/* Local/Cloud mode toggle (Redesigned: iOS Segmented Control) */
+.mode-options {
+  display: flex;
+  background-color: #7676801f;
+  padding: 2px;
+  border-radius: 8px;
+  margin-bottom: 4px; /* Space before inputs */
+}
+
+.mode-option {
+  flex: 1;
+  padding: 6px 4px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text);
+  text-align: center;
+  cursor: pointer;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  background: transparent;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  user-select: none;
+  -webkit-user-select: none;
+  white-space: nowrap; /* Prevent text wrapping */
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.mode-option:first-child,
+.mode-option:last-child {
+  border-radius: 6px;
+  border: 1px solid transparent;
+}
+
+.mode-option.active {
+  background: #FFFFFF;
+  color: #000;
+  font-weight: 600;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12), 0 0.5px 1px rgba(0, 0, 0, 0.04);
+  border: 0.5px solid rgba(0, 0, 0, 0.04);
+}
+
+.mode-option:not(.active):hover {
+  background: rgba(255, 255, 255, 0.4);
+}
+
+/* 搜索栏 */
+.search-bar {
+  position: relative;
+  display: flex;
+  gap: 8px;
+}
+
+#q {
+  background: #EFEFF4;
+  /* iOS Search Bar Color */
+  border-radius: 10px;
+  padding: 10px 12px;
+  font-size: 15px;
+  box-shadow: none;
+}
+
+#q:focus {
+  background: #fff;
+  border: 1px solid var(--accent);
+}
+
+#btn {
+  background: var(--accent);
+  color: white;
+  border: none;
+  border-radius: 10px;
+  padding: 0 16px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  font-size: 14px;
+}
+
+#btn:active {
+  opacity: 0.7;
+}
+
+/* 筛选行 */
+.filter-row {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+}
+.filter-row select {
+  flex: 1;
+  min-width: 0;
+}
+#filter-tag.reorder-done {
+  transition: background-color 0.2s ease, box-shadow 0.2s ease;
+}
+#filter-tag.reorder-flash {
+  background-color: var(--accent-bg);
+  box-shadow: 0 0 0 1px var(--accent);
+}
+
+/* 3. 滚动内容区域 */
+#content-area {
+  flex: 1;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  /* iOS顺滑滚动 */
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* 状态提示 */
+#log {
+  font-size: 13px;
+  color: var(--sub);
+  text-align: center;
+  padding: 10px 0;
+}
+
+/* 文献列表容器：整体圆角 */
+.list-container {
+  background: var(--surface);
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.04);
+  border: 1px solid rgba(0, 0, 0, 0.04);
+}
+
+/* 每一条：横向 flex，左侧内容 + 右侧 + 按钮 */
+.list-item {
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.list-item:last-child {
+  border-bottom: none;
+}
+
+.list-item:active {
+  background: #fafafa;
+}
+
+.list-item-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.add-to-mn-btn {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  background: var(--accent-bg);
+  color: var(--accent);
+  font-size: 20px;
+  font-weight: 300;
+  line-height: 1;
+  text-decoration: none;
+  transition: opacity 0.2s;
+}
+
+.add-to-mn-btn:hover {
+  opacity: 0.9;
+}
+
+.add-to-mn-btn:active {
+  opacity: 0.7;
+}
+
+.list-title {
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1.4;
+  color: var(--text);
+}
+
+.meta-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--sub);
+  flex-wrap: wrap;
+}
+
+.tag {
+  background: #F0F0F5;
+  color: #666;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 500;
+}
+
+/* 按钮组 */
+.action-row {
+  margin-top: 4px;
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 6px 12px;
+  border-radius: 100px;
+  /* 胶囊圆角 */
+  font-size: 12px;
+  font-weight: 500;
+  text-decoration: none;
+  transition: opacity 0.2s;
+}
+
+.pill:hover {
+  opacity: 0.8;
+}
+
+.pill-zotero {
+  background: var(--accent-bg);
+  color: var(--accent);
+}
+
+.pill-web {
+  background: #F2F2F7;
+  color: #666;
+}
+
+.pill-pdf {
+  background: #E8F5E9;
+  color: #2E7D32;
+}
+
+/* Green */
+
+/* View switcher: Library | Selected Cards */
+.view-switcher {
+  display: flex;
+  align-items: center;
+  background-color: #7676801f;
+  padding: 2px;
+  border-radius: 8px;
+  margin-top: 12px;
+}
+.selected-reload-icon {
+  color: var(--sub);
+  font-size: 18px;
+  line-height: 12px;
+  margin-left: 4px;
+  user-select: none;
+  -webkit-user-select: none;
+}
+.view-option {
+  flex: 1;
+  padding: 6px 8px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text);
+  text-align: center;
+  cursor: pointer;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  background: transparent;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  user-select: none;
+  -webkit-user-select: none;
+}
+.view-option.active {
+  background: #FFFFFF;
+  color: #000;
+  font-weight: 600;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12), 0 0.5px 1px rgba(0, 0, 0, 0.04);
+  border: 0.5px solid rgba(0, 0, 0, 0.04);
+}
+.view-option:not(.active):hover {
+  background: rgba(255, 255, 255, 0.4);
+}
+
+/* Library view: search + filters + content */
+/* Library view: iOS-style white surface, outer margin around form */
+#library-view {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  min-height: 0;
+  background-color: var(--surface);
+  padding: 16px;
+  margin: 0;
+}
+#library-view .search-bar { margin-bottom: 0; }
+#library-view .filter-row { flex-shrink: 0; }
+#library-view #content-area {
+  flex: 1;
+  min-height: 0;
+  padding-left: 0;
+  padding-right: 0;
+  padding-bottom: 16px;
+}
+
+/* Selected Cards panel */
+#selected-panel {
+  display: none;
+  flex: 1;
+  flex-direction: column;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  padding: 16px;
+  gap: 12px;
+  min-height: 0;
+}
+#selected-panel.show {
+  display: flex;
+}
+.selected-empty-state {
+  font-size: 13px;
+  color: var(--sub);
+  text-align: center;
+  padding: 24px 16px;
+}
+.selected-toolbar {
+  display: flex;
+  gap: 8px;
+  padding: 4px 0 12px 0;
+  flex-shrink: 0;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 8px;
+}
+.selected-toolbar button {
+  padding: 0 16px;
+  font-size: 14px;
+  font-weight: 600;
+  border: none;
+  border-radius: 10px;
+  cursor: pointer;
+  white-space: nowrap;
+  height: 36px;
+  line-height: 36px;
+}
+.selected-toolbar button:active { opacity: 0.7; }
+#btn-select-in-zotero {
+  background: var(--accent);
+  color: white;
+}
+#btn-copy-reference {
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border);
+}
+#btn-copy-reference:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
