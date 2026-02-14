@@ -207,7 +207,7 @@
                         }
                         var addTitle = (d.title || 'Untitled').replace(/"/g, '&quot;');
                         var year = (d.date || '').substring(0, 4) || '';
-                        var author = (d.creators && d.creators[0] && d.creators[0].lastName) || 'Unknown';
+                        var author = (d.creators && d.creators[0] && (d.creators[0].lastName || d.creators[0].name)) || 'Unknown';
                         var createNoteUrl = buildCreateNoteUrl(d.title || 'Untitled', d.itemType, year, author, lItem, pdf ? ('zotero://open-pdf/library/items/' + pdf) : '', '', '', d.key, mode, uid, key);
                         cards.push('<div class="list-item"><div class="list-item-body"><div class="list-title">' + addTitle + '</div><div class="meta-row"><span class="tag">' + d.itemType + '</span><span>' + author + '</span><span>' + (d.date || '') + '</span></div><div class="action-row">' + btns + '</div></div><a href="' + createNoteUrl + '" class="add-to-mn-btn" title="Add to MN">+</a></div>');
                     }
@@ -234,7 +234,7 @@
                         }
                         var addTitle = (d.title || 'Untitled').replace(/"/g, '&quot;');
                         var year = (d.date || '').substring(0, 4) || '';
-                        var author = (d.creators && d.creators[0] && d.creators[0].lastName) || 'Unknown';
+                        var author = (d.creators && d.creators[0] && (d.creators[0].lastName || d.creators[0].name)) || 'Unknown';
                         var createNoteUrl = buildCreateNoteUrl(d.title || 'Untitled', d.itemType, year, author, lItem, pdf ? lPdf : '', cItem, pdf ? cPdf : '', d.key, mode, uid, key);
                         return '<div class="list-item"><div class="list-item-body"><div class="list-title">' + addTitle + '</div><div class="meta-row"><span class="tag">' + d.itemType + '</span><span>' + author + '</span><span>' + (d.date || '') + '</span></div><div class="action-row">' + btns + '</div></div><a href="' + createNoteUrl + '" class="add-to-mn-btn" title="Add to MN">+</a></div>';
                     }));
