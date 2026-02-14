@@ -29,9 +29,7 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Build .mnaddon
-        run: |
-          VERSION=${GITHUB_REF#refs/tags/v}
-          cd src && zip -r -q "../zotero-connector-v${VERSION}.mnaddon" .
+        run: pnpm build
 
       - name: Create Release
         uses: softprops/action-gh-release@v2

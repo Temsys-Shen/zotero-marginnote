@@ -1,5 +1,6 @@
 node_modules
 *.mnaddon
-.trae/**
-.cursor/**
-.agent/**
+.trae
+.cursor
+.agent
+dist
