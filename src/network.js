@@ -78,7 +78,9 @@ class SZMNNetwork {
         NSOperationQueue.mainQueue(),
         function (res, data, err) {
           if (!SZMNNetwork.isNil(err)) {
-            reject(err.localizedDescription ? err.localizedDescription() : "Network Error");
+            var msg = err.localizedDescription;
+            if (typeof msg === 'function') msg = msg.call(err);
+            reject(msg || "Network Error");
           } else {
             var response = new SZResponse(data, res);
             resolve(response);
