@@ -220,23 +220,8 @@ var SZConfigManager = class {
 
   static setConfigFromUrl(queryString) {
     if (!queryString) return;
-    const parts = queryString.split('&');
-    for (const part of parts) {
-      const eq = part.indexOf('=');
-      if (eq === -1) continue;
-      const k = decodeURIComponent(part.substring(0, eq));
-      const v = decodeURIComponent(part.substring(eq + 1).replace(/\+/g, ' '));
-      if (k === 'key') {
-        NSUserDefaults.standardUserDefaults().setObjectForKey(v, 'mn_zotero_config_' + k);
-      } else if (k === 'val') {
-        // This setConfig bridge seems to expect key/val as separate params
-        // But usually we set mn_zotero_config_TITLE where TITLE is the key.
-        // Let's keep the logic but refine once we know which key to use.
-      }
-    }
-    // Original logic was set mn_zotero_config_TITLE = val where TITLE is the 'key' param.
-    // Let's stick to that.
     let targetKey = '', targetVal = '';
+    const parts = queryString.split('&');
     for (const part of parts) {
       const eq = part.indexOf('=');
       if (eq === -1) continue;
@@ -387,21 +372,12 @@ var SZZoteroBridge = class {
     const ya = [p.year, p.author].filter(Boolean).map(esc).join(' ');
     const type = esc(p.type);
     let l = '';
-<<<<<<< HEAD
-    if (p.lZ) l += `<a href="${p.lZ}" z>🔗 Open in Zotero</a>`;
-    if (p.lP) l += `<a href="${p.lP}" z style="color:#2a3">📑 Read PDF</a>`;
-    if (p.lW) l += `<a href="${p.lW}" z style="color:#f90">🌐 Web</a>`;
-    if (p.lC) l += `<a href="${p.lC}" z style="color:#96f">📑 Cloud PDF</a>`;
-    if (!ya && !type && !l) return '';
-    return `<style>a[z]{color:#07f;text-decoration:none;font-weight:bolder}</style><div style="border-left:solid #07f .1875em;background:#fe;margin:.75em 0;padding:.125em .25em">${ya ? `<span style="color:#333;font:1.125em sans-serif">${ya}</span>` : ''}${type ? ` <span style="color:#999;font:1em sans-serif;border:solid #ddd .0625em;padding:.125em .5em;border-radius:.375em;vertical-align:text-bottom">${type}</span>` : ''}${l ? `<div style="display:flex;gap:.875em;margin-top:.375em">${l}</div>` : ''}</div>`;
-=======
     if (p.lZ) l += `<a href="${p.lZ}">🔗 Open in Zotero</a>`;
     if (p.lP) l += `<a href="${p.lP}" style="color:#2a3">📑 Read PDF</a>`;
     if (p.lW) l += `<a href="${p.lW}" style="color:#f90">🌐 Web</a>`;
     if (p.lC) l += `<a href="${p.lC}" style="color:#96f">📑 Cloud PDF</a>`;
     if (!ya && !type && !l) return '';
     return `<style>a{text-decoration:none;font-weight:bolder}</style><div>${ya ? `<x style="color:#3;font:1.1em">${ya}</x>` : ''}${type ? ` <x style="color:#9;font:1em;background:#eee;padding:.1em .5em;border-radius:.4em">${type}</x>` : ''}${l ? `<div>${l}</div>` : ''}</div>`;
->>>>>>> cbb5b61 (更新卡片样式，大幅压缩代码)
   }
 
   static _attachToZotero(self, note, p) {

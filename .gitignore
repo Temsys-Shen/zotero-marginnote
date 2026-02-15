@@ -1,7 +1,12 @@
 node_modules
-*.mnaddon
+.pnpm-store
+
+# AI IDES
 .trae
 .cursor
 .agent
-.pnpm-store
+.lingma
+
+# build artifacts
+*.mnaddon
 dist

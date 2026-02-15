@@ -168,6 +168,32 @@ select {
   box-shadow: none;
 }
 
+/* Password container with toggle icon */
+.password-container {
+  position: relative;
+  width: 100%;
+}
+
+.password-container input {
+  padding-right: 40px; /* Make room for the toggle icon */
+}
+
+.toggle-password {
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  cursor: pointer;
+  color: var(--sub);
+  font-size: 16px;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.toggle-password:hover {
+  color: var(--text);
+}
+
 input:focus {
   background: var(--surface);
   box-shadow: 0 0 0 2px var(--accent);

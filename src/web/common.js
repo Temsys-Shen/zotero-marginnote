@@ -9,6 +9,7 @@ function upd() {
     $('key').style.display = isC ? 'block' : 'none';
     $('uid').style.display = isC ? 'block' : 'none';
     $('slug').style.display = isC ? 'block' : 'none';
+    document.querySelector('.toggle-password').style.display = isC ? 'block' : 'none';
     if (window.resetFilterOptions) window.resetFilterOptions();
     if (window.loadFilters) window.loadFilters();
 }
@@ -122,3 +123,41 @@ function localFetch(url, options) {
         setTimeout(function () { try { iframe.remove(); } catch (e) { } }, 500);
     });
 }
+
+/**
+ * Toggle password visibility for API key input
+ */
+function togglePasswordVisibility() {
+    const keyInput = $('key');
+    const toggleIcon = document.querySelector('.toggle-password');
+    if (keyInput.type === 'password') {
+        keyInput.type = 'text';
+        setToggleIcon(toggleIcon, true); // 显示状态
+    } else {
+        keyInput.type = 'password';
+        setToggleIcon(toggleIcon, false); // 隐藏状态
+    }
+}
+
+/**
+ * 设置密码切换图标的SVG
+ * @param {HTMLElement} element - 要设置图标的元素
+ * @param {boolean} isVisible - 是否为可见状态
+ */
+function setToggleIcon(element, isVisible) {
+    if (isVisible) {
+        // 可见状态：眼睛图标
+        element.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>';
+    } else {
+        // 隐藏状态：眼睛斜线图标
+        element.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path><line x1="1" y1="1" x2="23" y2="23"></line></svg>';
+    }
+}
+
+// 初始化密码切换图标为隐藏状态
+(function initToggleIcon() {
+    const toggleIcon = document.querySelector('.toggle-password');
+    if (toggleIcon) {
+        setToggleIcon(toggleIcon, false);
+    }
+})();
