@@ -478,12 +478,99 @@ var SZZoteroBridge = class {
       timeout: 45
     }).then((result) => {
       console.log('[PDF DOWNLOAD] success', result);
-      SZZoteroBridge._notifyDownloadResult(self.webView, requestId, true, '');
+      try {
+        const importResult = SZZoteroBridge._importAndOpenDownloadedPdf(self, result && result.path ? result.path : '');
+        console.log('[PDF IMPORT] success', importResult);
+        SZZoteroBridge._notifyDownloadResult(self.webView, requestId, true, '');
+      } catch (error) {
+        const errorMsg = String((error && error.message) ? error.message : error);
+        console.log('[PDF IMPORT] failed', { error: errorMsg, path: result && result.path ? result.path : '' });
+        SZZoteroBridge._notifyDownloadResult(self.webView, requestId, false, errorMsg);
+      }
     }, (error) => {
       const errorMsg = String(error);
       console.log('[PDF DOWNLOAD] failed', errorMsg);
       SZZoteroBridge._notifyDownloadResult(self.webView, requestId, false, errorMsg);
     });
+  }
+
+  static _importAndOpenDownloadedPdf(self, localPath) {
+    const path = localPath ? String(localPath).trim() : '';
+    if (!path) throw 'import-failed:empty-path';
+
+    let fileUrl = path;
+    try {
+      const nsUrl = NSURL.fileURLWithPath(path);
+      let absolute = nsUrl.absoluteString;
+      if (typeof absolute === 'function') absolute = absolute();
+      if (absolute) fileUrl = String(absolute);
+    } catch (e) {
+      // Fallback to plain path when file URL conversion is unavailable.
+    }
+
+    console.log('[PDF IMPORT] importing', { path: path, fileUrl: fileUrl });
+
+    const app = Application.sharedInstance();
+    let importRaw = '';
+    try {
+      importRaw = app.importDocument(fileUrl);
+    } catch (e) {
+      throw `import-failed:${String((e && e.message) ? e.message : e)}`;
+    }
+
+    const docMd5 = SZZoteroBridge._normalizeImportResultToDocMd5(importRaw);
+    console.log('[PDF IMPORT] importDocument result', { raw: String(importRaw || ''), docMd5: docMd5 });
+    if (!docMd5) throw `import-failed:${String(importRaw || '')}`;
+
+    let doc = undefined;
+    try {
+      doc = Database.sharedInstance().getDocumentById(docMd5);
+    } catch (e) {
+      doc = undefined;
+    }
+    if (!doc) throw `import-failed:${String(importRaw || docMd5)}`;
+
+    const resolved = SZZoteroBridge._resolveCurrentNotebookId(self);
+    const { studyController, notebookId } = resolved;
+    console.log('[PDF IMPORT] notebook resolved', { notebookId: notebookId });
+
+    if (!studyController || !studyController.openNotebookAndDocument) {
+      throw 'open-failed:study-controller-unavailable';
+    }
+
+    try {
+      studyController.openNotebookAndDocument(notebookId, docMd5);
+    } catch (e) {
+      throw `open-failed:${String((e && e.message) ? e.message : e)}`;
+    }
+
+    console.log('[PDF IMPORT] openNotebookAndDocument called', { notebookId: notebookId, docMd5: docMd5 });
+    return { notebookId: notebookId, docMd5: docMd5 };
+  }
+
+  static _resolveCurrentNotebookId(self) {
+    const targetWindow = (self.addon && self.addon.window) ? self.addon.window : self.addonWindow;
+    const studyController = Application.sharedInstance().studyController(targetWindow);
+    const notebookController = studyController && studyController.notebookController ? studyController.notebookController : null;
+
+    const fromNotebookId = notebookController && notebookController.notebookId ? String(notebookController.notebookId).trim() : '';
+    const fromCurrTopic = notebookController && notebookController.currTopic ? String(notebookController.currTopic).trim() : '';
+    const fromCached = self && self.currentNotebookId ? String(self.currentNotebookId).trim() : '';
+
+    const notebookId = fromNotebookId || fromCurrTopic || fromCached;
+    if (!notebookId) {
+      console.log('[PDF IMPORT] notebook resolve failed', {
+        fromNotebookId: fromNotebookId,
+        fromCurrTopic: fromCurrTopic,
+        fromCached: fromCached
+      });
+      throw 'notebook-missing';
+    }
+    return { studyController: studyController, notebookId: notebookId };
+  }
+
+  static _normalizeImportResultToDocMd5(importResult) {
+    return String(importResult || '').trim();
   }
 
   static _notifyDownloadResult(webView, requestId, ok, errorMsg) {
