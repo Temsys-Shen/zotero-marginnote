@@ -6,6 +6,7 @@ node_modules
 .cursor
 .agent
 .lingma
+codex*
 
 # build artifacts
 *.mnaddon

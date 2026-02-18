@@ -151,6 +151,109 @@
             return 'mnzotero://createNote?' + q.join('&');
         }
 
+        function buildDownloadPdfUrl(uid, attachmentKey, title, apiKey, requestId) {
+            var q = [
+                'uid=' + encodeURIComponent(uid || ''),
+                'attachmentKey=' + encodeURIComponent(attachmentKey || ''),
+                'fileName=' + encodeURIComponent(title || 'Untitled'),
+                'requestId=' + encodeURIComponent(requestId || '')
+            ];
+            if (apiKey) q.push('key=' + encodeURIComponent(apiKey));
+            return 'mnzotero://downloadPdf?' + q.join('&');
+        }
+
+        function buildDownloadPdfIcon() {
+            return '<svg class="pdf-download-icon" viewBox="0 0 100 100" aria-hidden="true"><g class="pdf-rotor"><rect width="100" height="100" rx="8" fill="#E53935"></rect><text x="50%" y="52%" font-family="Arial, sans-serif" font-size="28" font-weight="bold" fill="white" text-anchor="middle" dominant-baseline="middle">PDF</text><circle class="pdf-plus-badge" cx="80" cy="80" r="12" fill="white"></circle><path class="pdf-plus-mark" d="M75 80 H85 M80 75 V85" stroke="#E53935" stroke-width="3" stroke-linecap="round"></path></g></svg>';
+        }
+
+        var __mnDownloadPending = {};
+        var __mnSeq = 0;
+
+        function createMNRequestId() {
+            __mnSeq += 1;
+            return 'mn_dl_' + Date.now() + '_' + __mnSeq;
+        }
+
+        function sendMNProtocol(url) {
+            var iframe = document.createElement('iframe');
+            iframe.style.display = 'none';
+            iframe.src = url;
+            document.body.appendChild(iframe);
+            setTimeout(function () { try { iframe.remove(); } catch (e) { } }, 600);
+        }
+
+        function startDownloadButtonMotion(btn) {
+            var rotor = btn.querySelector('.pdf-rotor');
+            if (!rotor) return null;
+            var plusMark = btn.querySelector('.pdf-plus-mark');
+            btn.classList.remove('is-finishing', 'is-success', 'is-failed');
+            btn.classList.add('is-downloading');
+            if (plusMark) plusMark.style.opacity = '0';
+            rotor.style.animation = 'none';
+            rotor.offsetHeight;
+            rotor.style.animation = 'mn-download-spin 0.9s linear infinite';
+            return { rotor: rotor };
+        }
+
+        function finishDownloadButtonMotion(btn, state, ok) {
+            if (!btn) return;
+            btn.classList.add('is-finishing');
+            if (ok) btn.classList.add('is-success');
+            else btn.classList.add('is-failed');
+            setTimeout(function () {
+                var rotor = state && state.rotor ? state.rotor : btn.querySelector('.pdf-rotor');
+                var plusMark = btn.querySelector('.pdf-plus-mark');
+                if (rotor) {
+                    rotor.style.animation = 'none';
+                    rotor.style.transform = 'rotate(0deg)';
+                }
+                if (plusMark) plusMark.style.opacity = '';
+                btn.classList.remove('is-downloading', 'is-finishing', 'is-success', 'is-failed');
+            }, 350);
+        }
+
+        function findDownloadButton(node) {
+            var current = node;
+            while (current && current !== document) {
+                if (current.classList && current.classList.contains('download-pdf-btn')) return current;
+                current = current.parentNode;
+            }
+            return null;
+        }
+
+        window.onMNDownloadResult = function (requestId, ok, errorMsg) {
+            var entry = __mnDownloadPending[requestId];
+            if (!entry) return;
+            delete __mnDownloadPending[requestId];
+            finishDownloadButtonMotion(entry.button, entry.motion, !!ok);
+            if (!ok && errorMsg) console.log('[PDF DOWNLOAD] UI error', errorMsg);
+        };
+
+        document.addEventListener('click', function (event) {
+            var btn = findDownloadButton(event.target);
+            if (!btn) return;
+            event.preventDefault();
+            if (btn.classList.contains('is-downloading')) return;
+
+            var uid = btn.getAttribute('data-uid') || '';
+            var attachmentKey = btn.getAttribute('data-attachment-key') || '';
+            var fileName = btn.getAttribute('data-file-name') || 'Untitled';
+            var apiKey = btn.getAttribute('data-api-key') || '';
+            if (!uid || !attachmentKey) return;
+
+            var requestId = createMNRequestId();
+            var motion = startDownloadButtonMotion(btn);
+            __mnDownloadPending[requestId] = { button: btn, motion: motion };
+            setTimeout(function () {
+                var stale = __mnDownloadPending[requestId];
+                if (!stale) return;
+                delete __mnDownloadPending[requestId];
+                finishDownloadButtonMotion(stale.button, stale.motion, false);
+            }, 45000);
+            var protocolUrl = buildDownloadPdfUrl(uid, attachmentKey, fileName, apiKey, requestId);
+            sendMNProtocol(protocolUrl);
+        }, false);
+
         async function run() {
             const q = $('q').value.trim();
             let [mode, uid, slug, key] = ['mode', 'uid', 'slug', 'key'].map(i => $(i).value);
@@ -239,7 +342,14 @@
                         var year = (d.date || '').substring(0, 4) || '';
                         var author = (d.creators && d.creators[0] && (d.creators[0].lastName || d.creators[0].name)) || 'Unknown';
                         var createNoteUrl = buildCreateNoteUrl(d.title || 'Untitled', d.itemType, year, author, lItem, pdf ? lPdf : '', cItem, pdf ? cPdf : '', d.key, mode, uid, key);
-                        return '<div class="list-item"><div class="list-item-body"><div class="list-title">' + addTitle + '</div><div class="meta-row"><span class="tag">' + d.itemType + '</span><span>' + author + '</span><span>' + (d.date || '') + '</span></div><div class="action-row">' + btns + '</div></div><a href="' + createNoteUrl + '" class="add-to-mn-btn" title="Add to MN">+</a></div>';
+                        var actionButtons = '';
+                        if (pdf) {
+                            var safeTitle = (d.title || 'Untitled').replace(/"/g, '&quot;');
+                            var safeKey = String(key || '').replace(/"/g, '&quot;');
+                            actionButtons += '<a href="#" class="add-to-mn-btn download-pdf-btn" title="Download PDF" data-uid="' + uid + '" data-attachment-key="' + pdf + '" data-file-name="' + safeTitle + '" data-api-key="' + safeKey + '">' + buildDownloadPdfIcon() + '</a>';
+                        }
+                        actionButtons += '<a href="' + createNoteUrl + '" class="add-to-mn-btn" title="Add to MN">+</a>';
+                        return '<div class="list-item"><div class="list-item-body"><div class="list-title">' + addTitle + '</div><div class="meta-row"><span class="tag">' + d.itemType + '</span><span>' + author + '</span><span>' + (d.date || '') + '</span></div><div class="action-row">' + btns + '</div></div><div class="list-item-actions">' + actionButtons + '</div></div>';
                     }));
                 }
 

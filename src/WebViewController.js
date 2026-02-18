@@ -279,6 +279,12 @@ var SZZoteroBridge = class {
       return false;
     }
 
+    if (host === 'downloadPdf' || path.indexOf('downloadPdf') !== -1) {
+      const queryString = SZZoteroBridge._getQueryString(url, urlString);
+      SZZoteroBridge._handleDownloadPdf(self, queryString);
+      return false;
+    }
+
     return true;
   }
 
@@ -432,6 +438,61 @@ var SZZoteroBridge = class {
     });
   }
 
+  static _handleDownloadPdf(self, queryString) {
+    if (!queryString) return;
+    const params = {};
+    const parts = queryString.split('&');
+    for (const part of parts) {
+      const eq = part.indexOf('=');
+      if (eq === -1) continue;
+      const k = decodeURIComponent(part.substring(0, eq));
+      const v = decodeURIComponent(part.substring(eq + 1).replace(/\+/g, ' '));
+      params[k] = v;
+    }
+
+    const uid = params.uid ? String(params.uid) : '';
+    const attachmentKey = params.attachmentKey ? String(params.attachmentKey) : '';
+    const requestId = params.requestId ? String(params.requestId) : '';
+    if (!uid || !attachmentKey) {
+      SZZoteroBridge._notifyDownloadResult(self.webView, requestId, false, 'missing-params');
+      return;
+    }
+
+    const defaults = NSUserDefaults.standardUserDefaults();
+    let cloudApiBaseUrl = defaults.objectForKey('mn_zotero_config_cloud_api_baseurl');
+    cloudApiBaseUrl = cloudApiBaseUrl ? String(cloudApiBaseUrl) : 'https://api.zotero.org';
+    cloudApiBaseUrl = cloudApiBaseUrl.replace(/\/+$/, '');
+    const downloadUrl = `${cloudApiBaseUrl}/users/${encodeURIComponent(uid)}/items/${encodeURIComponent(attachmentKey)}/file`;
+
+    const title = params.fileName ? String(params.fileName).trim() : '';
+    const fileName = title ? (title.endsWith('.pdf') ? title : `${title}.pdf`) : `${attachmentKey}.pdf`;
+    const headers = { 'Zotero-API-Version': '3' };
+    if (params.key) headers['Zotero-API-Key'] = String(params.key);
+
+    SZMNNetwork.downloadToDocumentPath(downloadUrl, {
+      method: 'GET',
+      headers: headers,
+      subdirectory: 'Zotero Downloads',
+      fileName: fileName,
+      overwrite: true,
+      timeout: 45
+    }).then((result) => {
+      console.log('[PDF DOWNLOAD] success', result);
+      SZZoteroBridge._notifyDownloadResult(self.webView, requestId, true, '');
+    }, (error) => {
+      const errorMsg = String(error);
+      console.log('[PDF DOWNLOAD] failed', errorMsg);
+      SZZoteroBridge._notifyDownloadResult(self.webView, requestId, false, errorMsg);
+    });
+  }
+
+  static _notifyDownloadResult(webView, requestId, ok, errorMsg) {
+    if (!webView || !requestId) return;
+    const escId = String(requestId).replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/\r/g, '').replace(/\n/g, '\\n');
+    const escError = String(errorMsg || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/\r/g, '').replace(/\n/g, '\\n');
+    webView.evaluateJavaScript(`(function(){ if (window.onMNDownloadResult) window.onMNDownloadResult('${escId}', ${ok ? 'true' : 'false'}, '${escError}'); })();`, null);
+  }
+
   static _handleFocusNote(self, queryString) {
     if (!queryString) return;
     let noteId = '';
@@ -507,4 +568,3 @@ var SZWebViewController = JSB.defineClass('SZWebViewController : UIViewControlle
     return true;
   }
 });
-
