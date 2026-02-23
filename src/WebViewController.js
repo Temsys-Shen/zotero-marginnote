@@ -529,14 +529,21 @@ var SZZoteroBridge = class {
   static _attachToZotero(self, note, p) {
     try {
       const { noteId } = note;
-      if (!noteId) return;
-      const notebookTitle = String(note.notebook.title || '');
+      if (!noteId) {
+        Application.sharedInstance().showHUD('Card created.', self.view, 1.5);
+        return;
+      }
+      // Local API in current Zotero Connector does not support POST /items, keep card creation only.
+      if (p.mode !== 'C') {
+        Application.sharedInstance().showHUD('Card created.', self.view, 1.5);
+        return;
+      }
+      const notebookTitle = (note && note.notebook && note.notebook.title !== undefined && note.notebook.title !== null) ? String(note.notebook.title) : '';
       const attachmentTitle = notebookTitle ? `Open in MarginNote-${notebookTitle}` : 'Open in MarginNote';
       const uid = p.uid || '0';
-      const isCloud = (p.mode === 'C');
-      const url = isCloud ? `https://api.zotero.org/users/${uid}/items` : `http://localhost:23119/api/users/${uid}/items`;
+      const url = `https://api.zotero.org/users/${uid}/items`;
       const headers = { 'Content-Type': 'application/json', 'Zotero-API-Version': '3' };
-      if (isCloud && p.key) headers['Zotero-API-Key'] = p.key;
+      if (p.key) headers['Zotero-API-Key'] = p.key;
       const postBody = [{ itemType: 'attachment', linkMode: 'linked_url', parentItem: p.itemKey, title: attachmentTitle, url: `marginnote4app://note/${String(noteId)}` }];
 
       SZMNNetwork.fetch(url, { method: 'POST', headers: headers, json: postBody }).then(() => {
