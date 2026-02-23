@@ -188,7 +188,7 @@ var SZWebUIHandler = class {
     if (htmlPath) {
       self.webView.loadRequest(NSURLRequest.requestWithURL(NSURL.fileURLWithPath(htmlPath)));
     } else {
-      self.webView.loadHTMLStringBaseURL('<html><body style="margin:20px;">未找到 mainPath，无法加载 index.html</body></html>', null);
+      self.webView.loadHTMLStringBaseURL('<html><body style="margin:20px;">mainPath not found. Unable to load index.html.</body></html>', null);
     }
   }
 }
@@ -285,20 +285,77 @@ var SZZoteroBridge = class {
       return false;
     }
 
+    if (host === 'exportLiteratureNotes' || path.indexOf('exportLiteratureNotes') !== -1) {
+      const queryString = SZZoteroBridge._getQueryString(url, urlString);
+      SZZoteroBridge._handleExportLiteratureNotes(self, queryString);
+      return false;
+    }
+
+    if (host === 'exportAllLiteratureNotes' || path.indexOf('exportAllLiteratureNotes') !== -1) {
+      const queryString = SZZoteroBridge._getQueryString(url, urlString);
+      SZZoteroBridge._handleExportAllLiteratureNotes(self, queryString);
+      return false;
+    }
+
     return true;
   }
 
   static _getQueryString(url, urlString) {
+    const fallbackQuery = urlString.indexOf('?') !== -1 ? (urlString.split('?')[1] || '') : '';
     let queryString = '';
     try {
       let q = url.query;
       if (typeof q === 'function') q = q();
       if (q) queryString = String(q);
-      else if (urlString.indexOf('?') !== -1) queryString = urlString.split('?')[1] || '';
+      else queryString = fallbackQuery;
     } catch (e) {
-      if (urlString.indexOf('?') !== -1) queryString = urlString.split('?')[1] || '';
+      queryString = fallbackQuery;
     }
     return queryString;
+  }
+
+  static _parseQueryString(queryString) {
+    const params = {};
+    if (!queryString) return params;
+    const parts = String(queryString).split('&');
+    for (const part of parts) {
+      if (!part) continue;
+      const eq = part.indexOf('=');
+      if (eq === -1) continue;
+      const k = decodeURIComponent(part.substring(0, eq));
+      const v = decodeURIComponent(part.substring(eq + 1).replace(/\+/g, ' '));
+      params[k] = v;
+    }
+    return params;
+  }
+
+  static _resolveCloudApiBaseUrl() {
+    const defaults = NSUserDefaults.standardUserDefaults();
+    let cloudApiBaseUrl = defaults.objectForKey('mn_zotero_config_cloud_api_baseurl');
+    cloudApiBaseUrl = cloudApiBaseUrl ? String(cloudApiBaseUrl) : 'https://api.zotero.org';
+    return cloudApiBaseUrl.replace(/\/+$/, '');
+  }
+
+  static _validateExportParams(self, params, requireTarget) {
+    const mode = params.mode ? String(params.mode).trim() : '';
+    const uid = params.uid ? String(params.uid).trim() : '';
+    const key = params.key ? String(params.key).trim() : '';
+    const noteId = params.noteId ? String(params.noteId).trim() : '';
+    const itemKey = params.itemKey ? String(params.itemKey).trim() : '';
+
+    if (mode !== 'C') {
+      Application.sharedInstance().showHUD('This feature currently supports Cloud API only.', self.view, 2);
+      return { ok: false };
+    }
+    if (!uid || !key) {
+      Application.sharedInstance().showHUD('Missing Cloud API credentials.', self.view, 2);
+      return { ok: false };
+    }
+    if (requireTarget && (!noteId || !itemKey)) {
+      Application.sharedInstance().showHUD('Missing export target parameters.', self.view, 2);
+      return { ok: false };
+    }
+    return { ok: true, uid, key, noteId, itemKey, mode };
   }
 
   static _handleGetSelectedNotes(self) {
@@ -312,18 +369,101 @@ var SZZoteroBridge = class {
     self.webView.evaluateJavaScript(`(function(){ try { window.__selectedNotes = JSON.parse('${esc}'); } catch (_) { window.__selectedNotes = []; } if (window.onSelectedNotes) window.onSelectedNotes(); })();`, null);
   }
 
-  static _handleCreateNote(self, queryString) {
-    const params = {};
-    if (queryString) {
-      const parts = queryString.split('&');
-      for (const part of parts) {
-        const eq = part.indexOf('=');
-        if (eq === -1) continue;
-        const k = decodeURIComponent(part.substring(0, eq));
-        const v = decodeURIComponent(part.substring(eq + 1).replace(/\+/g, ' '));
-        params[k] = v;
-      }
+  static _handleExportLiteratureNotes(self, queryString) {
+    const params = SZZoteroBridge._parseQueryString(queryString);
+    const validated = SZZoteroBridge._validateExportParams(self, params, true);
+    if (!validated.ok) return;
+
+    SZZoteroBridge._syncLiteratureTargets(self, [{ noteId: validated.noteId, itemKey: validated.itemKey }], {
+      uid: validated.uid,
+      key: validated.key
+    });
+  }
+
+  static _handleExportAllLiteratureNotes(self, queryString) {
+    const params = SZZoteroBridge._parseQueryString(queryString);
+    const validated = SZZoteroBridge._validateExportParams(self, params, false);
+    if (!validated.ok) return;
+
+    const targetWindow = (self.addon && self.addon.window) ? self.addon.window : self.addonWindow;
+    let list = [];
+    if (targetWindow && typeof getSelectedLiteratureNotes === 'function') {
+      try { list = getSelectedLiteratureNotes(targetWindow); } catch (e) { list = []; }
     }
+    const targets = (Array.isArray(list) ? list : []).filter((item) => item && item.noteId && item.itemKey).map((item) => ({
+      noteId: String(item.noteId),
+      itemKey: String(item.itemKey)
+    }));
+    if (targets.length === 0) {
+      Application.sharedInstance().showHUD('No literature cards selected.', self.view, 2);
+      return;
+    }
+    SZZoteroBridge._syncLiteratureTargets(self, targets, {
+      uid: validated.uid,
+      key: validated.key
+    });
+  }
+
+  static _syncLiteratureTargets(self, targets, auth) {
+    const list = Array.isArray(targets) ? targets : [];
+    if (list.length === 0) {
+      Application.sharedInstance().showHUD('No sync targets found.', self.view, 2);
+      return;
+    }
+
+    const baseUrl = SZZoteroBridge._resolveCloudApiBaseUrl();
+    const pluginVersion = '0.5.0';
+    const summary = { created: 0, updated: 0, deletedDuplicates: 0, failed: 0, empty: 0, total: list.length, authFailed: false };
+
+    Application.sharedInstance().showHUD(`Pushing notes (${list.length})`, self.view, 1.2);
+
+    let chain = Promise.resolve();
+    list.forEach((target) => {
+      chain = chain.then(() => {
+        if (summary.authFailed) return;
+        const payload = MNTreeExportService.buildLiteratureExportPayload(String(target.noteId), {
+          pluginVersion: pluginVersion
+        });
+        if (!payload || !payload.ok) {
+          summary.failed += 1;
+          return;
+        }
+        if (!payload.entries || payload.entries.length === 0) {
+          summary.empty += 1;
+          return;
+        }
+
+        return ZoteroNoteSyncService.syncLiteraturePayload({
+          uid: auth.uid,
+          apiKey: auth.key,
+          baseUrl: baseUrl,
+          parentItem: String(target.itemKey),
+          entries: payload.entries
+        }).then((result) => {
+          summary.created += result.created || 0;
+          summary.updated += result.updated || 0;
+          summary.deletedDuplicates += result.deletedDuplicates || 0;
+          summary.failed += result.failed || 0;
+          if (result.skippedEmpty) summary.empty += 1;
+          if (result.authFailed) summary.authFailed = true;
+        });
+      });
+    });
+
+    chain.then(() => {
+      if (summary.authFailed) {
+        Application.sharedInstance().showHUD(`Authentication failed, stopped. Created ${summary.created}, updated ${summary.updated}, cleaned ${summary.deletedDuplicates}, failed ${summary.failed}.`, self.view, 3);
+        return;
+      }
+      Application.sharedInstance().showHUD(`Push complete. Created ${summary.created}, updated ${summary.updated}, cleaned ${summary.deletedDuplicates}, failed ${summary.failed}, empty ${summary.empty}.`, self.view, 3);
+    }).catch((err) => {
+      const msg = String((err && err.message) ? err.message : err);
+      Application.sharedInstance().showHUD(`Push failed: ${msg}`, self.view, 3);
+    });
+  }
+
+  static _handleCreateNote(self, queryString) {
+    const params = SZZoteroBridge._parseQueryString(queryString);
     if (!params.title) return;
 
     const targetWindow = (self.addon && self.addon.window) ? self.addon.window : self.addonWindow;
@@ -338,7 +478,7 @@ var SZZoteroBridge = class {
     if (!notebook) return;
     const doc = (notebook.documents && notebook.documents.length > 0) ? notebook.documents[0] : (notebook.mainDocMd5 ? db.getDocumentById(notebook.mainDocMd5) : undefined);
     if (!doc) {
-      Application.sharedInstance().showHUD('请先打开文档', self.view, 2);
+      Application.sharedInstance().showHUD('Please open a document first.', self.view, 2);
       return;
     }
 
@@ -369,7 +509,7 @@ var SZZoteroBridge = class {
     if (newNote && params.itemKey) {
       SZZoteroBridge._attachToZotero(self, newNote, params);
     } else if (newNote) {
-      Application.sharedInstance().showHUD('已创建卡片', self.view, 1.5);
+      Application.sharedInstance().showHUD('Card created.', self.view, 1.5);
     }
   }
 
@@ -391,7 +531,7 @@ var SZZoteroBridge = class {
       const { noteId } = note;
       if (!noteId) return;
       const notebookTitle = String(note.notebook.title || '');
-      const attachmentTitle = notebookTitle ? `在MarginNote中打开-${notebookTitle}` : '在MarginNote中打开';
+      const attachmentTitle = notebookTitle ? `Open in MarginNote-${notebookTitle}` : 'Open in MarginNote';
       const uid = p.uid || '0';
       const isCloud = (p.mode === 'C');
       const url = isCloud ? `https://api.zotero.org/users/${uid}/items` : `http://localhost:23119/api/users/${uid}/items`;
@@ -400,12 +540,12 @@ var SZZoteroBridge = class {
       const postBody = [{ itemType: 'attachment', linkMode: 'linked_url', parentItem: p.itemKey, title: attachmentTitle, url: `marginnote4app://note/${String(noteId)}` }];
 
       SZMNNetwork.fetch(url, { method: 'POST', headers: headers, json: postBody }).then(() => {
-        Application.sharedInstance().showHUD('已创建卡片', self.view, 1.5);
+        Application.sharedInstance().showHUD('Card created.', self.view, 1.5);
       }, () => {
-        Application.sharedInstance().showHUD('已创建卡片，Zotero 附件添加失败', self.view, 2);
+        Application.sharedInstance().showHUD('Card created, but failed to add Zotero attachment.', self.view, 2);
       });
     } catch (e) {
-      Application.sharedInstance().showHUD('已创建卡片', self.view, 1.5);
+      Application.sharedInstance().showHUD('Card created.', self.view, 1.5);
     }
   }
 
@@ -477,19 +617,15 @@ var SZZoteroBridge = class {
       overwrite: true,
       timeout: 45
     }).then((result) => {
-      console.log('[PDF DOWNLOAD] success', result);
       try {
-        const importResult = SZZoteroBridge._importAndOpenDownloadedPdf(self, result && result.path ? result.path : '');
-        console.log('[PDF IMPORT] success', importResult);
+        SZZoteroBridge._importAndOpenDownloadedPdf(self, result && result.path ? result.path : '');
         SZZoteroBridge._notifyDownloadResult(self.webView, requestId, true, '');
       } catch (error) {
         const errorMsg = String((error && error.message) ? error.message : error);
-        console.log('[PDF IMPORT] failed', { error: errorMsg, path: result && result.path ? result.path : '' });
         SZZoteroBridge._notifyDownloadResult(self.webView, requestId, false, errorMsg);
       }
     }, (error) => {
       const errorMsg = String(error);
-      console.log('[PDF DOWNLOAD] failed', errorMsg);
       SZZoteroBridge._notifyDownloadResult(self.webView, requestId, false, errorMsg);
     });
   }
@@ -508,8 +644,6 @@ var SZZoteroBridge = class {
       // Fallback to plain path when file URL conversion is unavailable.
     }
 
-    console.log('[PDF IMPORT] importing', { path: path, fileUrl: fileUrl });
-
     const app = Application.sharedInstance();
     let importRaw = '';
     try {
@@ -519,7 +653,6 @@ var SZZoteroBridge = class {
     }
 
     const docMd5 = SZZoteroBridge._normalizeImportResultToDocMd5(importRaw);
-    console.log('[PDF IMPORT] importDocument result', { raw: String(importRaw || ''), docMd5: docMd5 });
     if (!docMd5) throw `import-failed:${String(importRaw || '')}`;
 
     let doc = undefined;
@@ -532,7 +665,6 @@ var SZZoteroBridge = class {
 
     const resolved = SZZoteroBridge._resolveCurrentNotebookId(self);
     const { studyController, notebookId } = resolved;
-    console.log('[PDF IMPORT] notebook resolved', { notebookId: notebookId });
 
     if (!studyController || !studyController.openNotebookAndDocument) {
       throw 'open-failed:study-controller-unavailable';
@@ -544,7 +676,6 @@ var SZZoteroBridge = class {
       throw `open-failed:${String((e && e.message) ? e.message : e)}`;
     }
 
-    console.log('[PDF IMPORT] openNotebookAndDocument called', { notebookId: notebookId, docMd5: docMd5 });
     return { notebookId: notebookId, docMd5: docMd5 };
   }
 
@@ -559,11 +690,6 @@ var SZZoteroBridge = class {
 
     const notebookId = fromNotebookId || fromCurrTopic || fromCached;
     if (!notebookId) {
-      console.log('[PDF IMPORT] notebook resolve failed', {
-        fromNotebookId: fromNotebookId,
-        fromCurrTopic: fromCurrTopic,
-        fromCached: fromCached
-      });
       throw 'notebook-missing';
     }
     return { studyController: studyController, notebookId: notebookId };
@@ -635,7 +761,7 @@ var SZWebViewController = JSB.defineClass('SZWebViewController : UIViewControlle
   },
   webViewDidFailLoadWithError: function (wv, error) {
     UIApplication.sharedApplication().networkActivityIndicatorVisible = false;
-    var errHTML = "<html><body style='margin:20px; font-family:-apple-system; color:#666;'><h3>加载失败</h3><p>" + String(error.localizedDescription || '').replace(/</g, '&lt;') + "</p></body></html>";
+    var errHTML = "<html><body style='margin:20px; font-family:-apple-system; color:#666;'><h3>Load failed</h3><p>" + String(error.localizedDescription || '').replace(/</g, '&lt;') + "</p></body></html>";
     self.webView.loadHTMLStringBaseURL(errHTML, null);
   },
 

@@ -226,7 +226,6 @@
             if (!entry) return;
             delete __mnDownloadPending[requestId];
             finishDownloadButtonMotion(entry.button, entry.motion, !!ok);
-            if (!ok && errorMsg) console.log('[PDF DOWNLOAD] UI error', errorMsg);
         };
 
         document.addEventListener('click', function (event) {

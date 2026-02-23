@@ -35,14 +35,14 @@
         </div>
     </header>
 
-    <div id="selected-panel" class="show">
-        <div id="selected-toolbar" class="selected-toolbar" style="display: none;">
-            <button type="button" id="btn-select-in-zotero">Select in Zotero</button>
-            <button type="button" id="btn-copy-reference" disabled>Copy Reference</button>
+        <div id="selected-panel" class="show">
+            <div id="selected-toolbar" class="selected-toolbar" style="display: none;">
+                <button type="button" id="btn-select-in-zotero">Select in Zotero</button>
+                <button type="button" id="btn-export-all-notes">Push All Notes</button>
+            </div>
+            <div id="selected-empty" class="selected-empty-state">Loading…</div>
+            <div id="selected-list" class="list-container" style="display: none;"></div>
         </div>
-        <div id="selected-empty" class="selected-empty-state">Loading…</div>
-        <div id="selected-list" class="list-container" style="display: none;"></div>
-    </div>
 
     <script src="common.js"></script>
     <script>
@@ -62,6 +62,21 @@
             iframe.src = 'mnzotero://getSelectedNotes';
             document.body.appendChild(iframe);
             setTimeout(function () { try { iframe.remove(); } catch (e) { } }, 500);
+        }
+
+        function sendMNProtocol(url) {
+            var iframe = document.createElement('iframe');
+            iframe.style.display = 'none';
+            iframe.src = url;
+            document.body.appendChild(iframe);
+            setTimeout(function () { try { iframe.remove(); } catch (e) { } }, 600);
+        }
+
+        function getSyncConfig() {
+            var mode = $('mode') ? $('mode').value : '';
+            var uid = $('uid') ? String($('uid').value || '').trim() : '';
+            var key = $('key') ? String($('key').value || '').trim() : '';
+            return { mode: mode, uid: uid, key: key };
         }
 
         // Auto-load on page load
@@ -90,7 +105,12 @@
             var html = list.map(function (item) {
                 var title = (item.title || '').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
                 var noteId = item.noteId || '';
-                return '<div class="list-item" onclick="focusNote(\'' + noteId + '\')" style="cursor:pointer;"><div class="list-item-body"><div class="list-title">' + title + '</div></div></div>';
+                var itemKey = item.itemKey || '';
+                return '<div class="list-item selectable-note-row" onclick="focusNote(\'' + noteId + '\')" style="cursor:pointer;">'
+                    + '<div class="list-item-body"><div class="list-title">' + title + '</div></div>'
+                    + '<div class="list-item-actions">'
+                    + '<button type="button" class="row-export-btn" onclick="exportSingle(event,\'' + noteId + '\',\'' + itemKey + '\')">Push Note</button>'
+                    + '</div></div>';
             }).join('');
             listEl.innerHTML = html;
         };
@@ -104,8 +124,22 @@
             setTimeout(function () { try { iframe.remove(); } catch (e) { } }, 500);
         }
 
+        function exportSingle(evt, noteId, itemKey) {
+            if (evt && evt.stopPropagation) evt.stopPropagation();
+            var cfg = getSyncConfig();
+            var q = [
+                'mode=' + encodeURIComponent(cfg.mode || ''),
+                'uid=' + encodeURIComponent(cfg.uid || ''),
+                'key=' + encodeURIComponent(cfg.key || ''),
+                'noteId=' + encodeURIComponent(noteId || ''),
+                'itemKey=' + encodeURIComponent(itemKey || '')
+            ];
+            sendMNProtocol('mnzotero://exportLiteratureNotes?' + q.join('&'));
+        }
+
         (function initSelectedToolbar() {
             var btnSelect = $('btn-select-in-zotero');
+            var btnExportAll = $('btn-export-all-notes');
             if (btnSelect) {
                 btnSelect.addEventListener('click', function () {
                     var list = window.__selectedNotes;
@@ -119,6 +153,17 @@
                     document.body.appendChild(a);
                     a.click();
                     document.body.removeChild(a);
+                });
+            }
+            if (btnExportAll) {
+                btnExportAll.addEventListener('click', function () {
+                    var cfg = getSyncConfig();
+                    var q = [
+                        'mode=' + encodeURIComponent(cfg.mode || ''),
+                        'uid=' + encodeURIComponent(cfg.uid || ''),
+                        'key=' + encodeURIComponent(cfg.key || '')
+                    ];
+                    sendMNProtocol('mnzotero://exportAllLiteratureNotes?' + q.join('&'));
                 });
             }
         })();
