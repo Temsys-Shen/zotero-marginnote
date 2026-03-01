@@ -6,6 +6,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
     <title>Zotero Connector - Library</title>
     <link rel="stylesheet" href="common.css">
+    <script src="i18n.js"></script>
 </head>
 
 <body>
@@ -57,10 +58,47 @@
 
     <script src="common.js"></script>
     <script>
+        // 初始化 HTML 静态文本
+        (function() {
+            // Header
+            document.querySelector('h1').textContent = T('app_title');
+            document.querySelector('#settings-details > summary').textContent = T('settings');
+            
+            // Settings
+            var modeOptions = document.querySelectorAll('.mode-option');
+            modeOptions.forEach(function(opt, idx) {
+                var values = [T('local_api'), T('cloud_api')];
+                if (idx < values.length) opt.textContent = values[idx];
+            });
+            
+            document.getElementById('uid').placeholder = T('user_id');
+            document.getElementById('slug').placeholder = T('username');
+            document.getElementById('key').placeholder = T('api_key');
+            
+            // View switcher
+            var viewOptions = document.querySelectorAll('.view-option');
+            viewOptions.forEach(function(opt, idx) {
+                var values = [T('library'), T('selected_cards')];
+                if (idx < values.length) opt.textContent = values[idx];
+            });
+            
+            // Search bar
+            var qInput = document.getElementById('q');
+            if (qInput) qInput.placeholder = T('search_placeholder');
+            
+            var searchBtn = document.getElementById('btn');
+            if (searchBtn) searchBtn.textContent = T('search_button');
+            
+            // Log
+            var logDiv = document.getElementById('log');
+            if (logDiv) logDiv.textContent = T('ready_to_search');
+        })();
+    </script>
+    <script>
         function resetFilterOptions() {
             var colSelect = $('filter-collection');
             var tagSelect = $('filter-tag');
-            if (colSelect) { colSelect.innerHTML = '<option value="">All</option>'; }
+            if (colSelect) { colSelect.innerHTML = '<option value="">' + T('all') + '</option>'; }
             if (tagSelect) { tagSelect.innerHTML = ''; }
         }
 
@@ -77,7 +115,7 @@
             var colSelect = $('filter-collection');
             var tagSelect = $('filter-tag');
             if (!colSelect || !tagSelect) return;
-            colSelect.innerHTML = '<option value="">All</option>';
+            colSelect.innerHTML = '<option value="">' + T('all') + '</option>';
             tagSelect.innerHTML = '';
             try {
                 var colRes = await doFetch(base + '/collections', { headers: headers });
@@ -114,7 +152,9 @@
         }
 
         // Panel show hook for library
-        window.__onPanelShow = function () { loadFilters(); };
+        window.__onPanelShow = function() {
+            loadFilters();
+        };
 
         // Initial config load for filters (if common.js loaded early)
         var colSelect = $('filter-collection');
@@ -155,7 +195,7 @@
             var q = [
                 'uid=' + encodeURIComponent(uid || ''),
                 'attachmentKey=' + encodeURIComponent(attachmentKey || ''),
-                'fileName=' + encodeURIComponent(title || 'Untitled'),
+                'fileName=' + encodeURIComponent(title || T('Untitled')),
                 'requestId=' + encodeURIComponent(requestId || '')
             ];
             if (apiKey) q.push('key=' + encodeURIComponent(apiKey));
@@ -263,7 +303,7 @@
             ui.btn.disabled = true;
             ui.out.innerHTML = '';
             ui.log.style.display = 'block';
-            ui.log.innerText = 'Searching...';
+            ui.log.innerText = T('searching');
 
             var headers = { 'Zotero-API-Version': 3 };
             if (mode === 'C' && key) headers['Zotero-API-Key'] = key;
@@ -283,11 +323,11 @@
 
             try {
                 var r1 = await doFetch(url, { headers: headers });
-                if (!r1.ok) throw new Error("Connection Failed");
+                if (!r1.ok) throw new Error(T('connection_failed'));
 
                 const items = (await r1.json()).filter(i => !['attachment', 'note'].includes(i.data.itemType));
 
-                if (!items.length) { ui.log.innerText = 'No matches found.'; return; }
+                if (!items.length) { ui.log.innerText = T('no_matches_found'); return; }
                 ui.log.innerText = `Fetching attachments for ${items.length} items...`;
 
                 var cards;
@@ -305,16 +345,16 @@
                             }
                         } catch (e) { }
                         var lItem = 'zotero://select/library/items/' + d.key;
-                        var btns = '<a href="' + lItem + '" class="pill pill-zotero">Zotero Item</a>';
+                        var btns = '<a href="' + lItem + '" class="pill pill-zotero">' + T('open_in_zotero') + '</a>';
                         if (pdf) {
                             var lPdf = 'zotero://open-pdf/library/items/' + pdf;
-                            btns += '<a href="' + lPdf + '" class="pill pill-pdf">Local PDF</a>';
+                            btns += '<a href="' + lPdf + '" class="pill pill-pdf">' + T('local_pdf') + '</a>';
                         }
-                        var addTitle = (d.title || 'Untitled').replace(/"/g, '&quot;');
+                        var addTitle = (d.title || T('Untitled')).replace(/"/g, '"');
                         var year = (d.date || '').substring(0, 4) || '';
-                        var author = (d.creators && d.creators[0] && (d.creators[0].lastName || d.creators[0].name)) || 'Unknown';
-                        var createNoteUrl = buildCreateNoteUrl(d.title || 'Untitled', d.itemType, year, author, lItem, pdf ? ('zotero://open-pdf/library/items/' + pdf) : '', '', '', d.key, mode, uid, key);
-                        cards.push('<div class="list-item"><div class="list-item-body"><div class="list-title">' + addTitle + '</div><div class="meta-row"><span class="tag">' + d.itemType + '</span><span>' + author + '</span><span>' + (d.date || '') + '</span></div><div class="action-row">' + btns + '</div></div><a href="' + createNoteUrl + '" class="add-to-mn-btn" title="Add to MN">+</a></div>');
+                        var author = (d.creators && d.creators[0] && (d.creators[0].lastName || d.creators[0].name)) || T('unknown');
+                        var createNoteUrl = buildCreateNoteUrl(d.title || T('Untitled'), d.itemType, year, author, lItem, pdf ? ('zotero://open-pdf/library/items/' + pdf) : '', '', '', d.key, mode, uid, key);
+                        cards.push('<div class="list-item"><div class="list-item-body"><div class="list-title">' + addTitle + '</div><div class="meta-row"><span class="tag">' + d.itemType + '</span><span>' + author + '</span><span>' + (d.date || '') + '</span></div><div class="action-row">' + btns + '</div></div><a href="' + createNoteUrl + '" class="add-to-mn-btn" title="' + T('add_to_mn') + '">+</a></div>');
                     }
                 } else {
                     cards = await Promise.all(items.map(async function (item) {
@@ -331,23 +371,23 @@
                         var u = slug || 'user';
                         var lItem = 'zotero://select/library/items/' + d.key;
                         var cItem = 'https://www.zotero.org/' + u + '/items/' + d.key;
-                        var btns = '<a href="' + lItem + '" class="pill pill-zotero">Zotero Item</a><a href="' + cItem + '" target="_blank" class="pill pill-web">Web</a>';
+                        var btns = '<a href="' + lItem + '" class="pill pill-zotero">' + T('open_in_zotero') + '</a><a href="' + cItem + '" target="_blank" class="pill pill-web">' + T('web') + '</a>';
                         if (pdf) {
                             var lPdf = 'zotero://open-pdf/library/items/' + pdf;
                             var cPdf = 'https://www.zotero.org/' + u + '/items/' + d.key + '/attachment/' + pdf + '/reader';
-                            btns += '<a href="' + lPdf + '" class="pill pill-pdf">Local PDF</a><a href="' + cPdf + '" target="_blank" class="pill pill-web">Cloud PDF</a>';
+                            btns += '<a href="' + lPdf + '" class="pill pill-pdf">' + T('local_pdf') + '</a><a href="' + cPdf + '" target="_blank" class="pill pill-web">' + T('cloud_pdf') + '</a>';
                         }
-                        var addTitle = (d.title || 'Untitled').replace(/"/g, '&quot;');
+                        var addTitle = (d.title || T('Untitled')).replace(/"/g, '"');
                         var year = (d.date || '').substring(0, 4) || '';
-                        var author = (d.creators && d.creators[0] && (d.creators[0].lastName || d.creators[0].name)) || 'Unknown';
-                        var createNoteUrl = buildCreateNoteUrl(d.title || 'Untitled', d.itemType, year, author, lItem, pdf ? lPdf : '', cItem, pdf ? cPdf : '', d.key, mode, uid, key);
+                        var author = (d.creators && d.creators[0] && (d.creators[0].lastName || d.creators[0].name)) || T('unknown');
+                        var createNoteUrl = buildCreateNoteUrl(d.title || T('Untitled'), d.itemType, year, author, lItem, pdf ? lPdf : '', cItem, pdf ? cPdf : '', d.key, mode, uid, key);
                         var actionButtons = '';
                         if (pdf) {
-                            var safeTitle = (d.title || 'Untitled').replace(/"/g, '&quot;');
-                            var safeKey = String(key || '').replace(/"/g, '&quot;');
-                            actionButtons += '<a href="#" class="add-to-mn-btn download-pdf-btn" title="Download PDF" data-uid="' + uid + '" data-attachment-key="' + pdf + '" data-file-name="' + safeTitle + '" data-api-key="' + safeKey + '">' + buildDownloadPdfIcon() + '</a>';
+                            var safeTitle = (d.title || T('Untitled')).replace(/"/g, '"');
+                            var safeKey = String(key || '').replace(/"/g, '"');
+                            actionButtons += '<a href="#" class="add-to-mn-btn download-pdf-btn" title="' + T('download_pdf') + '" data-uid="' + uid + '" data-attachment-key="' + pdf + '" data-file-name="' + safeTitle + '" data-api-key="' + safeKey + '">' + buildDownloadPdfIcon() + '</a>';
                         }
-                        actionButtons += '<a href="' + createNoteUrl + '" class="add-to-mn-btn" title="Add to MN">+</a>';
+                        actionButtons += '<a href="' + createNoteUrl + '" class="add-to-mn-btn" title="' + T('add_to_mn') + '">+</a>';
                         return '<div class="list-item"><div class="list-item-body"><div class="list-title">' + addTitle + '</div><div class="meta-row"><span class="tag">' + d.itemType + '</span><span>' + author + '</span><span>' + (d.date || '') + '</span></div><div class="action-row">' + btns + '</div></div><div class="list-item-actions">' + actionButtons + '</div></div>';
                     }));
                 }

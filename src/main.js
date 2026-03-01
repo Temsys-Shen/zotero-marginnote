@@ -1,4 +1,5 @@
 JSB.newAddon = function (mainPath) {
+  JSB.require('i18n');
   JSB.require('WebViewController');
   JSB.require('network');
   JSB.require('SelectedNotesHelper');

@@ -6,6 +6,43 @@
     <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
     <title>Zotero Connector - Selection</title>
     <link rel="stylesheet" href="common.css">
+    <script src="i18n.js"></script>
+    <script>
+        // 初始化 HTML 静态文本
+        document.addEventListener('DOMContentLoaded', function() {
+            // Header
+            document.querySelector('h1').textContent = T('app_title');
+            document.querySelector('#settings-details > summary').textContent = T('settings');
+            
+            // Settings
+            var modeOptions = document.querySelectorAll('.mode-option');
+            modeOptions.forEach(function(opt, idx) {
+                var values = [T('local_api'), T('cloud_api')];
+                if (idx < values.length) opt.textContent = values[idx];
+            });
+            
+            document.getElementById('uid').placeholder = T('user_id');
+            document.getElementById('slug').placeholder = T('username');
+            document.getElementById('key').placeholder = T('api_key');
+            
+            // View switcher
+            var viewOptions = document.querySelectorAll('.view-option');
+            viewOptions.forEach(function(opt, idx) {
+                var values = [T('library'), T('selected_cards')];
+                if (idx < values.length) opt.textContent = values[idx];
+            });
+            
+            // Toolbar buttons
+            var btnSelect = document.getElementById('btn-select-in-zotero');
+            var btnExportAll = document.getElementById('btn-export-all-notes');
+            if (btnSelect) btnSelect.textContent = T('select_in_zotero');
+            if (btnExportAll) btnExportAll.textContent = T('push_all_notes');
+            
+            // Empty state
+            var emptyEl = document.getElementById('selected-empty');
+            if (emptyEl) emptyEl.textContent = T('loading');
+        });
+    </script>
 </head>
 
 <body>
@@ -35,28 +72,24 @@
         </div>
     </header>
 
-        <div id="selected-panel" class="show">
-            <div id="selected-toolbar" class="selected-toolbar" style="display: none;">
-                <button type="button" id="btn-select-in-zotero">Select in Zotero</button>
-                <button type="button" id="btn-export-all-notes">Push All Notes</button>
-            </div>
-            <div id="selected-empty" class="selected-empty-state">Loading…</div>
-            <div id="selected-list" class="list-container" style="display: none;"></div>
+    <div id="selected-panel" class="show">
+        <div id="selected-toolbar" class="selected-toolbar" style="display: none;">
+            <button type="button" id="btn-select-in-zotero">Select in Zotero</button>
+            <button type="button" id="btn-export-all-notes">Push All Notes</button>
         </div>
+        <div id="selected-empty" class="selected-empty-state">Loading…</div>
+        <div id="selected-list" class="list-container" style="display: none;"></div>
+    </div>
 
     <script src="common.js"></script>
     <script>
-        // Panel show hook for selection
-        window.__onPanelShow = function () {
-            loadSelectedNotes();
-        };
-
         function loadSelectedNotes() {
-            $('selected-empty').style.display = 'block';
-            $('selected-empty').textContent = 'Loading…';
-            $('selected-list').style.display = 'none';
-            $('selected-list').innerHTML = '';
-
+            var emptyEl = $('selected-empty');
+            if (emptyEl) emptyEl.style.display = 'block';
+            if (emptyEl) emptyEl.textContent = T('loading');
+            var listEl = $('selected-list');
+            if (listEl) listEl.style.display = 'none';
+            if (listEl) listEl.innerHTML = '';
             var iframe = document.createElement('iframe');
             iframe.style.display = 'none';
             iframe.src = 'mnzotero://getSelectedNotes';
@@ -93,26 +126,26 @@
             var listEl = $('selected-list');
             if (list.length === 0) {
                 if (toolbarEl) toolbarEl.style.display = 'none';
-                emptyEl.style.display = 'block';
-                emptyEl.textContent = 'No literature cards in current selection.';
-                listEl.style.display = 'none';
-                listEl.innerHTML = '';
+                if (emptyEl) emptyEl.style.display = 'block';
+                if (emptyEl) emptyEl.textContent = T('no_literature_cards');
+                if (listEl) listEl.style.display = 'none';
+                if (listEl) listEl.innerHTML = '';
                 return;
             }
             if (toolbarEl) toolbarEl.style.display = 'flex';
-            emptyEl.style.display = 'none';
-            listEl.style.display = 'block';
+            if (emptyEl) emptyEl.style.display = 'none';
+            if (listEl) listEl.style.display = 'block';
             var html = list.map(function (item) {
-                var title = (item.title || '').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+                var title = (item.title || '').replace(/</g, '<').replace(/>/g, '>').replace(/"/g, '"');
                 var noteId = item.noteId || '';
                 var itemKey = item.itemKey || '';
                 return '<div class="list-item selectable-note-row" onclick="focusNote(\'' + noteId + '\')" style="cursor:pointer;">'
                     + '<div class="list-item-body"><div class="list-title">' + title + '</div></div>'
                     + '<div class="list-item-actions">'
-                    + '<button type="button" class="row-export-btn" onclick="exportSingle(event,\'' + noteId + '\',\'' + itemKey + '\')">Push Note</button>'
+                    + '<button type="button" class="row-export-btn" onclick="exportSingle(event,\'' + noteId + '\',\'' + itemKey + '\')">' + T('push_note') + '</button>'
                     + '</div></div>';
             }).join('');
-            listEl.innerHTML = html;
+            if (listEl) listEl.innerHTML = html;
         };
 
         function focusNote(noteId) {
@@ -154,6 +187,7 @@
                     a.click();
                     document.body.removeChild(a);
                 });
+                btnSelect.textContent = T('select_in_zotero');
             }
             if (btnExportAll) {
                 btnExportAll.addEventListener('click', function () {
@@ -165,6 +199,7 @@
                     ];
                     sendMNProtocol('mnzotero://exportAllLiteratureNotes?' + q.join('&'));
                 });
+                btnExportAll.textContent = T('push_all_notes');
             }
         })();
     </script>

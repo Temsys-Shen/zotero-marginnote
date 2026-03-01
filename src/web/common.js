@@ -9,7 +9,8 @@ function upd() {
     $('key').style.display = isC ? 'block' : 'none';
     $('uid').style.display = isC ? 'block' : 'none';
     $('slug').style.display = isC ? 'block' : 'none';
-    document.querySelector('.toggle-password').style.display = isC ? 'block' : 'none';
+    var togglePassword = document.querySelector('.toggle-password');
+    if (togglePassword) togglePassword.style.display = isC ? 'block' : 'none';
     if (window.resetFilterOptions) window.resetFilterOptions();
     if (window.loadFilters) window.loadFilters();
 }

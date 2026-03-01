@@ -5,7 +5,7 @@ var SZWebUIHandler = class {
   static setupUI(controller) {
     const self = controller;
     // 1. View Setup
-    self.navigationItem.title = 'Web';
+    self.navigationItem.title = t('window_title');
     self.view.backgroundColor = UIColor.clearColor();
     self.view.layer.shadowOffset = { width: 0, height: 2 };
     self.view.layer.shadowRadius = 4;
@@ -37,7 +37,7 @@ var SZWebUIHandler = class {
     self.titleBar.autoresizingMask = (1 << 1);
 
     self.titleLabel = new UILabel({ x: 10, y: 0, width: initWidth - 20, height: titleHeight });
-    self.titleLabel.text = "Zotero Connector";
+    self.titleLabel.text = t('app_title');
     self.titleLabel.textAlignment = 1;
     self.titleLabel.font = UIFont.boldSystemFontOfSize(14);
     self.titleLabel.textColor = UIColor.darkGrayColor();
@@ -344,15 +344,15 @@ var SZZoteroBridge = class {
     const itemKey = params.itemKey ? String(params.itemKey).trim() : '';
 
     if (mode !== 'C') {
-      Application.sharedInstance().showHUD('This feature currently supports Cloud API only.', self.view, 2);
+      Application.sharedInstance().showHUD(t('this_feature_supports_cloud_api_only'), self.view, 2);
       return { ok: false };
     }
     if (!uid || !key) {
-      Application.sharedInstance().showHUD('Missing Cloud API credentials.', self.view, 2);
+      Application.sharedInstance().showHUD(t('missing_cloud_api_credentials'), self.view, 2);
       return { ok: false };
     }
     if (requireTarget && (!noteId || !itemKey)) {
-      Application.sharedInstance().showHUD('Missing export target parameters.', self.view, 2);
+      Application.sharedInstance().showHUD(t('missing_export_target_parameters'), self.view, 2);
       return { ok: false };
     }
     return { ok: true, uid, key, noteId, itemKey, mode };
@@ -395,7 +395,7 @@ var SZZoteroBridge = class {
       itemKey: String(item.itemKey)
     }));
     if (targets.length === 0) {
-      Application.sharedInstance().showHUD('No literature cards selected.', self.view, 2);
+      Application.sharedInstance().showHUD(t('no_literature_cards_selected'), self.view, 2);
       return;
     }
     SZZoteroBridge._syncLiteratureTargets(self, targets, {
@@ -407,7 +407,7 @@ var SZZoteroBridge = class {
   static _syncLiteratureTargets(self, targets, auth) {
     const list = Array.isArray(targets) ? targets : [];
     if (list.length === 0) {
-      Application.sharedInstance().showHUD('No sync targets found.', self.view, 2);
+      Application.sharedInstance().showHUD(t('no_sync_targets_found'), self.view, 2);
       return;
     }
 
@@ -415,7 +415,7 @@ var SZZoteroBridge = class {
     const pluginVersion = '0.5.0';
     const summary = { created: 0, updated: 0, deletedDuplicates: 0, failed: 0, empty: 0, total: list.length, authFailed: false };
 
-    Application.sharedInstance().showHUD(`Pushing notes (${list.length})`, self.view, 1.2);
+    Application.sharedInstance().showHUD(t('pushing_notes'), self.view, 1.2);
 
     let chain = Promise.resolve();
     list.forEach((target) => {
@@ -452,13 +452,13 @@ var SZZoteroBridge = class {
 
     chain.then(() => {
       if (summary.authFailed) {
-        Application.sharedInstance().showHUD(`Authentication failed, stopped. Created ${summary.created}, updated ${summary.updated}, cleaned ${summary.deletedDuplicates}, failed ${summary.failed}.`, self.view, 3);
+        Application.sharedInstance().showHUD(t('authentication_failed') + ', stopped. ' + t('found_items').replace('{count}', summary.created + ', ' + t('updated') + ' ' + summary.updated + ', ' + t('cleaned') + ' ' + summary.deletedDuplicates + ', ' + t('failed') + ' ' + summary.failed), self.view, 3);
         return;
       }
-      Application.sharedInstance().showHUD(`Push complete. Created ${summary.created}, updated ${summary.updated}, cleaned ${summary.deletedDuplicates}, failed ${summary.failed}, empty ${summary.empty}.`, self.view, 3);
+      Application.sharedInstance().showHUD(t('push_complete') + '. ' + t('found_items').replace('{count}', summary.created + ', ' + t('updated') + ' ' + summary.updated + ', ' + t('cleaned') + ' ' + summary.deletedDuplicates + ', ' + t('failed') + ' ' + summary.failed + ', ' + t('empty') + ' ' + summary.empty) + '.', self.view, 3);
     }).catch((err) => {
       const msg = String((err && err.message) ? err.message : err);
-      Application.sharedInstance().showHUD(`Push failed: ${msg}`, self.view, 3);
+      Application.sharedInstance().showHUD(t('push_failed') + ': ' + msg, self.view, 3);
     });
   }
 
@@ -478,7 +478,7 @@ var SZZoteroBridge = class {
     if (!notebook) return;
     const doc = (notebook.documents && notebook.documents.length > 0) ? notebook.documents[0] : (notebook.mainDocMd5 ? db.getDocumentById(notebook.mainDocMd5) : undefined);
     if (!doc) {
-      Application.sharedInstance().showHUD('Please open a document first.', self.view, 2);
+      Application.sharedInstance().showHUD(t('please_open_a_document_first'), self.view, 2);
       return;
     }
 
@@ -509,7 +509,7 @@ var SZZoteroBridge = class {
     if (newNote && params.itemKey) {
       SZZoteroBridge._attachToZotero(self, newNote, params);
     } else if (newNote) {
-      Application.sharedInstance().showHUD('Card created.', self.view, 1.5);
+      Application.sharedInstance().showHUD(t('card_created'), self.view, 1.5);
     }
   }
 
@@ -530,12 +530,12 @@ var SZZoteroBridge = class {
     try {
       const { noteId } = note;
       if (!noteId) {
-        Application.sharedInstance().showHUD('Card created.', self.view, 1.5);
+        Application.sharedInstance().showHUD(t('card_created'), self.view, 1.5);
         return;
       }
       // Local API in current Zotero Connector does not support POST /items, keep card creation only.
       if (p.mode !== 'C') {
-        Application.sharedInstance().showHUD('Card created.', self.view, 1.5);
+        Application.sharedInstance().showHUD(t('card_created'), self.view, 1.5);
         return;
       }
       const notebookTitle = (note && note.notebook && note.notebook.title !== undefined && note.notebook.title !== null) ? String(note.notebook.title) : '';
@@ -547,12 +547,12 @@ var SZZoteroBridge = class {
       const postBody = [{ itemType: 'attachment', linkMode: 'linked_url', parentItem: p.itemKey, title: attachmentTitle, url: `marginnote4app://note/${String(noteId)}` }];
 
       SZMNNetwork.fetch(url, { method: 'POST', headers: headers, json: postBody }).then(() => {
-        Application.sharedInstance().showHUD('Card created.', self.view, 1.5);
+        Application.sharedInstance().showHUD(t('card_created'), self.view, 1.5);
       }, () => {
-        Application.sharedInstance().showHUD('Card created, but failed to add Zotero attachment.', self.view, 2);
+        Application.sharedInstance().showHUD(t('card_created_but_failed_to_add_zotero_attachment'), self.view, 2);
       });
     } catch (e) {
-      Application.sharedInstance().showHUD('Card created.', self.view, 1.5);
+      Application.sharedInstance().showHUD(t('card_created'), self.view, 1.5);
     }
   }
 
@@ -761,7 +761,9 @@ var SZWebViewController = JSB.defineClass('SZWebViewController : UIViewControlle
     self.webView.delegate = null;
     UIApplication.sharedApplication().networkActivityIndicatorVisible = false;
   },
-  webViewDidStartLoad: function () { UIApplication.sharedApplication().networkActivityIndicatorVisible = true; },
+  webViewDidStartLoad: function () { 
+    UIApplication.sharedApplication().networkActivityIndicatorVisible = true;
+  },
   webViewDidFinishLoad: function () {
     UIApplication.sharedApplication().networkActivityIndicatorVisible = false;
     SZConfigManager.injectConfig(self.webView);
