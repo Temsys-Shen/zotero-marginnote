@@ -197,6 +197,67 @@ var SZWebUIHandler = class {
  * 配置管理类：负责 NSUserDefaults 读写与 WebView 脚本注入
  */
 var SZConfigManager = class {
+  static getDefaultFieldTemplates() {
+    return {
+      fixed: {
+        author: 'by {{value}}',
+        year: '({{value}})',
+        type: '<z style="color:#9;font:1em;background:#eee;padding:.1em .5em;border-radius:.4em">{{value}}</z>'
+      },
+      custom: []
+    };
+  }
+
+  static normalizeFieldTemplates(rawTemplates) {
+    const defaults = SZConfigManager.getDefaultFieldTemplates();
+    if (rawTemplates === undefined || rawTemplates === null || rawTemplates === '') {
+      return defaults;
+    }
+
+    let parsed = rawTemplates;
+    if (typeof parsed === 'string') {
+      try {
+        parsed = JSON.parse(parsed);
+      } catch (e) {
+        return defaults;
+      }
+    }
+
+    if (!parsed || typeof parsed !== 'object') {
+      return defaults;
+    }
+
+    const normalized = {
+      fixed: Object.assign({}, defaults.fixed),
+      custom: []
+    };
+
+    const fixedRaw = parsed.fixed;
+    if (fixedRaw && typeof fixedRaw === 'object') {
+      for (const key in defaults.fixed) {
+        const value = fixedRaw[key];
+        if (value !== undefined && value !== null && String(value).trim()) {
+          normalized.fixed[key] = String(value);
+        }
+      }
+    }
+
+    const customRaw = Array.isArray(parsed.custom) ? parsed.custom : [];
+    for (let i = 0; i < customRaw.length; i++) {
+      const item = customRaw[i];
+      if (!item || typeof item !== 'object') continue;
+      const field = item.field !== undefined && item.field !== null ? String(item.field).trim() : '';
+      if (!field) continue;
+      const templateRaw = item.template !== undefined && item.template !== null ? String(item.template) : '';
+      normalized.custom.push({
+        field: field,
+        template: templateRaw || '{{value}}'
+      });
+    }
+
+    return normalized;
+  }
+
   static saveFrameState(controller) {
     const frame = controller.view.frame;
     const config = { x: frame.x, y: frame.y, width: frame.width, height: frame.height };
@@ -204,7 +265,15 @@ var SZConfigManager = class {
   }
 
   static injectConfig(webView) {
-    const keys = ['uid', 'slug', 'key', 'mode'];
+    const keys = [
+      'uid',
+      'slug',
+      'key',
+      'mode',
+      'cloud_api_baseurl',
+      'onboarding_seen_v1',
+      'onboarding_force_show_once'
+    ];
     const config = {};
     const defaults = NSUserDefaults.standardUserDefaults();
     for (const key of keys) {
@@ -213,6 +282,8 @@ var SZConfigManager = class {
         config[key] = String(val);
       }
     }
+    const rawFieldTemplates = defaults.objectForKey('mn_zotero_config_fieldTemplates');
+    config.fieldTemplates = SZConfigManager.normalizeFieldTemplates(rawFieldTemplates);
     const jsonStr = JSON.stringify(config);
     const esc = jsonStr.replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/\r/g, '').replace(/\n/g, '\\n');
     webView.evaluateJavaScript(`(function(){ try { window.__mnConfig = JSON.parse('${esc}'); } catch (_) { window.__mnConfig = {}; } if (window.onMNConfig) window.onMNConfig(); })();`, null);
@@ -490,7 +561,8 @@ var SZZoteroBridge = class {
         newNote = createdNote;
         if (!createdNote) return;
 
-        const body = SZZoteroBridge._buildNoteBody(params);
+        const templatesHtml = SZZoteroBridge._getTemplatesHtml(params);
+        const body = SZZoteroBridge._buildNoteBody(params, templatesHtml);
         if (body && createdNote.appendMarkdownComment) {
           createdNote.appendMarkdownComment(body);
         }
@@ -513,17 +585,29 @@ var SZZoteroBridge = class {
     }
   }
 
-  static _buildNoteBody(p) {
+  static _getTemplatesHtml(params) {
+    if (!params || !params.templatesHtml) return '';
+    return String(params.templatesHtml);
+  }
+
+  static _buildNoteBody(p, templatesHtml) {
     const esc = (s) => !s ? '' : String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-    const ya = [p.year, p.author].filter(Boolean).map(esc).join(' ');
-    const type = esc(p.type);
+    var dynamicHtml = templatesHtml || '';
+
     let l = '';
-    if (p.lZ) l += `<a href="${p.lZ}">🔗 Open in Zotero</a>`;
-    if (p.lP) l += `<a href="${p.lP}" style="color:#2a3">📑 Read PDF</a>`;
-    if (p.lW) l += `<a href="${p.lW}" style="color:#f90">🌐 Web</a>`;
-    if (p.lC) l += `<a href="${p.lC}" style="color:#96f">📑 Cloud PDF</a>`;
-    if (!ya && !type && !l) return '';
-    return `<style>a{text-decoration:none;font-weight:bolder}</style><div>${ya ? `<x style="color:#3;font:1.1em">${ya}</x>` : ''}${type ? ` <x style="color:#9;font:1em;background:#eee;padding:.1em .5em;border-radius:.4em">${type}</x>` : ''}${l ? `<div>${l}</div>` : ''}</div>`;
+    if (p.lZ) l += '<a href="' + esc(p.lZ) + '">🔗 Open in Zotero</a>';
+    if (p.lP) l += '<a href="' + esc(p.lP) + '" style="color:#2a3">📑 Read PDF</a>';
+    if (p.lW) l += '<a href="' + esc(p.lW) + '" style="color:#f90">🌐 Web</a>';
+    if (p.lC) l += '<a href="' + esc(p.lC) + '" style="color:#96f">📑 Cloud PDF</a>';
+
+    if (!dynamicHtml && !l) return '';
+
+    var result = '<style>a{text-decoration:none;font-weight:bolder}</style><div>';
+    if (dynamicHtml) result += '<div class="custom-fields">' + dynamicHtml + '</div>';
+    if (l) result += '<div>' + l + '</div>';
+    result += '</div>';
+
+    return result;
   }
 
   static _attachToZotero(self, note, p) {
@@ -539,12 +623,12 @@ var SZZoteroBridge = class {
         return;
       }
       const notebookTitle = (note && note.notebook && note.notebook.title !== undefined && note.notebook.title !== null) ? String(note.notebook.title) : '';
-      const attachmentTitle = notebookTitle ? `Open in MarginNote-${notebookTitle}` : 'Open in MarginNote';
+      const attachmentTitle = notebookTitle ? 'Open in MarginNote-' + notebookTitle : 'Open in MarginNote';
       const uid = p.uid || '0';
-      const url = `https://api.zotero.org/users/${uid}/items`;
+      const url = 'https://api.zotero.org/users/' + uid + '/items';
       const headers = { 'Content-Type': 'application/json', 'Zotero-API-Version': '3' };
       if (p.key) headers['Zotero-API-Key'] = p.key;
-      const postBody = [{ itemType: 'attachment', linkMode: 'linked_url', parentItem: p.itemKey, title: attachmentTitle, url: `marginnote4app://note/${String(noteId)}` }];
+      const postBody = [{ itemType: 'attachment', linkMode: 'linked_url', parentItem: p.itemKey, title: attachmentTitle, url: 'marginnote4app://note/' + String(noteId) }];
 
       SZMNNetwork.fetch(url, { method: 'POST', headers: headers, json: postBody }).then(() => {
         Application.sharedInstance().showHUD(t('card_created'), self.view, 1.5);
@@ -571,16 +655,16 @@ var SZZoteroBridge = class {
           json: opts.json
         }).then((res) => {
           const payload = JSON.stringify({ ok: (res.status >= 200 && res.status < 300), status: res.status, body: res.json ? res.json() : res.text() });
-          webView.evaluateJavaScript(`(function(){ var c = window.__mnFetchCb && window.__mnFetchCb['${id}']; if(c) c(null, ${payload}); })();`, null);
+          webView.evaluateJavaScript('(function(){ var c = window.__mnFetchCb && window.__mnFetchCb[\'' + id + '\']; if(c) c(null, ' + payload + '); })();', null);
         }, (err) => {
           const msg = String(err.message || err);
           const esc = msg.replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/\r/g, '').replace(/\n/g, '\\n');
-          webView.evaluateJavaScript(`(function(){ var c = window.__mnFetchCb && window.__mnFetchCb['${id}']; if(c) c('${esc}', null); })();`, null);
+          webView.evaluateJavaScript('(function(){ var c = window.__mnFetchCb && window.__mnFetchCb[\'' + id + '\']; if(c) c(\'' + esc + '\', null); })();', null);
         });
       } catch (e) {
         const msg = String(e.message || e);
         const esc = msg.replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/\r/g, '').replace(/\n/g, '\\n');
-        webView.evaluateJavaScript(`(function(){ var c = window.__mnFetchCb && window.__mnFetchCb['${id || ''}']; if(c) c('${esc}', null); })();`, null);
+        webView.evaluateJavaScript('(function(){ var c = window.__mnFetchCb && window.__mnFetchCb[\'' + (id || '') + '\']; if(c) c(\'' + esc + '\', null); })();', null);
       }
     });
   }
@@ -609,10 +693,10 @@ var SZZoteroBridge = class {
     let cloudApiBaseUrl = defaults.objectForKey('mn_zotero_config_cloud_api_baseurl');
     cloudApiBaseUrl = cloudApiBaseUrl ? String(cloudApiBaseUrl) : 'https://api.zotero.org';
     cloudApiBaseUrl = cloudApiBaseUrl.replace(/\/+$/, '');
-    const downloadUrl = `${cloudApiBaseUrl}/users/${encodeURIComponent(uid)}/items/${encodeURIComponent(attachmentKey)}/file`;
+    const downloadUrl = cloudApiBaseUrl + '/users/' + encodeURIComponent(uid) + '/items/' + encodeURIComponent(attachmentKey) + '/file';
 
     const title = params.fileName ? String(params.fileName).trim() : '';
-    const fileName = title ? (title.endsWith('.pdf') ? title : `${title}.pdf`) : `${attachmentKey}.pdf`;
+    const fileName = title ? (title.endsWith('.pdf') ? title : title + '.pdf') : attachmentKey + '.pdf';
     const headers = { 'Zotero-API-Version': '3' };
     if (params.key) headers['Zotero-API-Key'] = String(params.key);
 
@@ -656,11 +740,11 @@ var SZZoteroBridge = class {
     try {
       importRaw = app.importDocument(fileUrl);
     } catch (e) {
-      throw `import-failed:${String((e && e.message) ? e.message : e)}`;
+      throw 'import-failed:' + String((e && e.message) ? e.message : e);
     }
 
     const docMd5 = SZZoteroBridge._normalizeImportResultToDocMd5(importRaw);
-    if (!docMd5) throw `import-failed:${String(importRaw || '')}`;
+    if (!docMd5) throw 'import-failed:' + String(importRaw || '');
 
     let doc = undefined;
     try {
@@ -668,7 +752,7 @@ var SZZoteroBridge = class {
     } catch (e) {
       doc = undefined;
     }
-    if (!doc) throw `import-failed:${String(importRaw || docMd5)}`;
+    if (!doc) throw 'import-failed:' + String(importRaw || docMd5);
 
     const resolved = SZZoteroBridge._resolveCurrentNotebookId(self);
     const { studyController, notebookId } = resolved;
@@ -680,7 +764,7 @@ var SZZoteroBridge = class {
     try {
       studyController.openNotebookAndDocument(notebookId, docMd5);
     } catch (e) {
-      throw `open-failed:${String((e && e.message) ? e.message : e)}`;
+      throw 'open-failed:' + String((e && e.message) ? e.message : e);
     }
 
     return { notebookId: notebookId, docMd5: docMd5 };
@@ -710,7 +794,7 @@ var SZZoteroBridge = class {
     if (!webView || !requestId) return;
     const escId = String(requestId).replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/\r/g, '').replace(/\n/g, '\\n');
     const escError = String(errorMsg || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/\r/g, '').replace(/\n/g, '\\n');
-    webView.evaluateJavaScript(`(function(){ if (window.onMNDownloadResult) window.onMNDownloadResult('${escId}', ${ok ? 'true' : 'false'}, '${escError}'); })();`, null);
+    webView.evaluateJavaScript('(function(){ if (window.onMNDownloadResult) window.onMNDownloadResult(\'' + escId + '\', ' + (ok ? 'true' : 'false') + ', \'' + escError + '\'); })();', null);
   }
 
   static _handleFocusNote(self, queryString) {
@@ -770,7 +854,7 @@ var SZWebViewController = JSB.defineClass('SZWebViewController : UIViewControlle
   },
   webViewDidFailLoadWithError: function (wv, error) {
     UIApplication.sharedApplication().networkActivityIndicatorVisible = false;
-    var errHTML = "<html><body style='margin:20px; font-family:-apple-system; color:#666;'><h3>Load failed</h3><p>" + String(error.localizedDescription || '').replace(/</g, '&lt;') + "</p></body></html>";
+    var errHTML = '<html><body style="margin:20px; font-family:-apple-system; color:#666;"><h3>Load failed</h3><p>' + String(error.localizedDescription || '').replace(/</g, '<') + '</p></body></html>';
     self.webView.loadHTMLStringBaseURL(errHTML, null);
   },
 

@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+    <title>Zotero Connector - Settings</title>
+    <link rel="stylesheet" href="common.css">
+    <script src="i18n.js"></script>
+</head>
+
+<body>
+
+    <header>
+        <div class="view-switcher">
+            <span class="view-option" data-view="library" role="button">Library</span>
+            <span class="view-option" data-view="selected" role="button">Selected Cards</span>
+            <span class="view-option active" role="button">Settings</span>
+        </div>
+    </header>
+
+    <main style="flex:1; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 16px; background-color: var(--surface);">
+        <div id="settings-view">
+            <input type="hidden" id="mode" value="L">
+            <div class="mode-options">
+                <span class="mode-option active" data-value="L" role="button">Local API</span>
+                <span class="mode-option" data-value="C" role="button">Cloud API</span>
+            </div>
+            <p id="api-mode-notice" class="api-mode-notice" style="display:none">使用Local API前，请在Zotero中开启“允许此计算机上的其他应用程序与Zotero通讯”。</p>
+            <input id="uid" placeholder="UserID" style="display:none">
+            <input id="slug" placeholder="Username" style="display:none">
+            <div class="password-container">
+                <input id="key" type="password" placeholder="API Key" style="display:none">
+                <span class="toggle-password" onclick="togglePasswordVisibility()" style="display:none"></span>
+            </div>
+
+            <div class="field-templates-panel">
+                <p class="field-templates-desc">Configure how Zotero fields are displayed in MarginNote cards.</p>
+                <div class="field-template-list" id="field-template-list">
+                    <!-- Fixed fields -->
+                    <div class="field-template-item">
+                        <span class="field-name">Author</span>
+                        <input type="text" class="field-template-input" data-field="author" placeholder="by {{value}}">
+                    </div>
+                    <div class="field-template-item">
+                        <span class="field-name">Year</span>
+                        <input type="text" class="field-template-input" data-field="year" placeholder="({{value}})">
+                    </div>
+                    <div class="field-template-item">
+                        <span class="field-name">Type</span>
+                        <input type="text" class="field-template-input" data-field="type" placeholder='<z style="color:#9;font:1em;background:#eee;padding:.1em .5em;border-radius:.4em">{{value}}</z>'>
+                    </div>
+                    <hr>
+                    <div class="custom-field-section">
+                        <h4>Custom Fields</h4>
+                        <div class="custom-field-list" id="custom-field-list">
+                            <!-- Custom fields will be added here -->
+                        </div>
+                        <button id="add-custom-field" class="btn-add-field">+ Add Field</button>
+                    </div>
+                </div>
+            </div>
+
+            <button id="btn-open-onboarding" class="btn-open-onboarding" onclick="openOnboardingFromSettings()">查看新手引导</button>
+        </div>
+    </main>
+
+    <script src="common.js"></script>
+    <script>
+        // 初始化settings页翻译
+        (function initSettingsI18n() {
+            var viewOptions = document.querySelectorAll('.view-option');
+            viewOptions.forEach(function(opt, idx) {
+                var values = [T('library'), T('selected_cards'), T('settings')];
+                if (idx < values.length) opt.textContent = values[idx];
+            });
+
+            var modeOptions = document.querySelectorAll('.mode-option');
+            modeOptions.forEach(function(opt, idx) {
+                var values = [T('local_api'), T('cloud_api')];
+                if (idx < values.length) opt.textContent = values[idx];
+            });
+
+            var uidEl = document.getElementById('uid');
+            var slugEl = document.getElementById('slug');
+            var keyEl = document.getElementById('key');
+            if (uidEl) uidEl.placeholder = T('user_id');
+            if (slugEl) slugEl.placeholder = T('username');
+            if (keyEl) keyEl.placeholder = T('api_key');
+            var apiModeNotice = document.getElementById('api-mode-notice');
+            if (apiModeNotice) apiModeNotice.textContent = T('local_api_limit_notice');
+
+            var addFieldBtn = document.getElementById('add-custom-field');
+            if (addFieldBtn) addFieldBtn.textContent = T('add_field');
+            var openOnboardingBtn = document.getElementById('btn-open-onboarding');
+            if (openOnboardingBtn) openOnboardingBtn.textContent = T('reopen_onboarding');
+
+            var desc = document.querySelector('.field-templates-desc');
+            if (desc) desc.textContent = T('field_templates_desc');
+
+            var customTitle = document.querySelector('.custom-field-section h4');
+            if (customTitle) customTitle.textContent = T('custom_fields');
+
+            var fieldLabels = {
+                author: T('field_author'),
+                year: T('field_year'),
+                type: T('field_type')
+            };
+            Object.keys(fieldLabels).forEach(function(key) {
+                var nameEl = document.querySelector('.field-template-input[data-field="' + key + '"]');
+                if (nameEl) {
+                    var label = nameEl.parentElement && nameEl.parentElement.querySelector('.field-name');
+                    if (label) label.textContent = fieldLabels[key];
+                    // 不覆盖 placeholder，保留用户自定义的默认模板
+                    // nameEl.placeholder = fieldLabels[key];
+                }
+            });
+            
+            // 显示 settings-view
+            var settingsView = document.getElementById('settings-view');
+            if (settingsView) settingsView.style.display = 'block';
+        })();
+
+        // View switcher logic for settings page
+        (function initSettingsSwitcher() {
+            var viewOptions = document.querySelectorAll('.view-option[data-view]');
+            viewOptions.forEach(function(el) {
+                el.addEventListener('click', function() {
+                    var view = this.getAttribute('data-view');
+                    if (view === 'library') {
+                        window.location.href = 'library.html';
+                    } else if (view === 'selected') {
+                        window.location.href = 'selection.html';
+                    }
+                });
+            });
+        })();
+    </script>
+</body>
+
+</html>

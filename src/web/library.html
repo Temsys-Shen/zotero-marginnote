@@ -12,29 +12,10 @@
 <body>
 
     <header>
-        <div class="top-row">
-            <h1>Zotero Connector</h1>
-            <details id="settings-details">
-                <summary>Settings</summary>
-                <div class="config-panel">
-                    <input type="hidden" id="mode" value="L">
-                    <div class="mode-options">
-                        <span class="mode-option active" data-value="L" role="button">Local API</span>
-                        <span class="mode-option" data-value="C" role="button">Cloud API</span>
-                    </div>
-                    <input id="uid" placeholder="UserID" style="display:none">
-                    <input id="slug" placeholder="Username" style="display:none">
-                    <div class="password-container">
-                        <input id="key" type="password" placeholder="API Key" style="display:none">
-                        <span class="toggle-password" onclick="togglePasswordVisibility()" style="display:none"></span>
-                    </div>
-                </div>
-            </details>
-        </div>
-
         <div class="view-switcher">
             <span class="view-option active" data-view="library" role="button">Library</span>
             <span class="view-option" data-view="selected" role="button">Selected Cards</span>
+            <span class="view-option" data-view="settings" role="button">Settings</span>
         </div>
     </header>
 
@@ -60,38 +41,48 @@
     <script>
         // 初始化 HTML 静态文本
         (function() {
-            // Header
-            document.querySelector('h1').textContent = T('app_title');
-            document.querySelector('#settings-details > summary').textContent = T('settings');
-            
-            // Settings
-            var modeOptions = document.querySelectorAll('.mode-option');
-            modeOptions.forEach(function(opt, idx) {
-                var values = [T('local_api'), T('cloud_api')];
-                if (idx < values.length) opt.textContent = values[idx];
-            });
-            
-            document.getElementById('uid').placeholder = T('user_id');
-            document.getElementById('slug').placeholder = T('username');
-            document.getElementById('key').placeholder = T('api_key');
-            
             // View switcher
             var viewOptions = document.querySelectorAll('.view-option');
             viewOptions.forEach(function(opt, idx) {
-                var values = [T('library'), T('selected_cards')];
+                var values = [T('library'), T('selected_cards'), T('settings')];
                 if (idx < values.length) opt.textContent = values[idx];
             });
-            
+
             // Search bar
             var qInput = document.getElementById('q');
             if (qInput) qInput.placeholder = T('search_placeholder');
-            
+
             var searchBtn = document.getElementById('btn');
             if (searchBtn) searchBtn.textContent = T('search_button');
-            
+
             // Log
             var logDiv = document.getElementById('log');
             if (logDiv) logDiv.textContent = T('ready_to_search');
+        })();
+
+        // View switcher logic
+        (function initSwitcher() {
+            var viewOptions = document.querySelectorAll('.view-option[data-view]');
+            viewOptions.forEach(function(el) {
+                el.addEventListener('click', function() {
+                    var view = this.getAttribute('data-view');
+
+                    // Update active state
+                    viewOptions.forEach(function(opt) {
+                        opt.classList.remove('active');
+                    });
+                    this.classList.add('active');
+
+                    // Switch views
+                    if (view === 'library') {
+                        // Already on library page
+                    } else if (view === 'selected') {
+                        window.location.href = 'selection.html';
+                    } else if (view === 'settings') {
+                        window.location.href = 'settings.html';
+                    }
+                });
+            });
         })();
     </script>
     <script>
@@ -103,9 +94,12 @@
         }
 
         async function loadFilters() {
-            var mode = $('mode').value;
-            var uid = ($('uid') && $('uid').value) || '';
-            var key = ($('key') && $('key').value) || '';
+            // 从注入的配置或 DOM 中读取配置
+            var cfg = window.__mnConfig || {};
+            var mode = $('mode') ? $('mode').value : (cfg.mode || 'L');
+            if (!API[mode]) mode = 'L';
+            var uid = ($('uid') && $('uid').value) || cfg.uid || '';
+            var key = ($('key') && $('key').value) || cfg.key || '';
             if (mode === 'L') uid = '0';
             if (mode === 'C' && !uid) return;
             var headers = { 'Zotero-API-Version': 3 };
@@ -155,6 +149,15 @@
         window.__onPanelShow = function() {
             loadFilters();
         };
+        
+        // Config injection fallback for library page
+        (function initConfigDrivenFilters() {
+            var existingOnMNConfig = window.onMNConfig;
+            window.onMNConfig = function() {
+                try { loadFilters(); } catch (e) {}
+                if (typeof existingOnMNConfig === 'function') existingOnMNConfig();
+            };
+        })();
 
         // Initial config load for filters (if common.js loaded early)
         var colSelect = $('filter-collection');
@@ -173,7 +176,84 @@
             });
         }
 
-        function buildCreateNoteUrl(title, type, year, author, linkZotero, linkPdf, linkWeb, linkCloudPdf, itemKey, mode, uid, apiKey) {
+        // 从 Zotero 数据中获取字段值
+        function getZoteroFieldValue(data, field) {
+            if (!data || !field) return undefined;
+
+            switch(field) {
+                case 'title':
+                    return data.title || '';
+                case 'author':
+                    return data.creators && data.creators[0] && (data.creators[0].lastName || data.creators[0].name) || '';
+                case 'year':
+                    var date = data.date || '';
+                    return date.substring(0, 4) || '';
+                case 'type':
+                    return data.itemType || '';
+                case 'tags':
+                    return Array.isArray(data.tags) ? data.tags.map(t => t.tag) : [];
+                case 'abstractNote':
+                    return data.abstractNote || '';
+                case 'DOI':
+                    return data.DOI || '';
+                case 'ISBN':
+                    return data.ISBN || '';
+                case 'ISSN':
+                    return data.ISSN || '';
+                case 'url':
+                    return data.url || '';
+                case 'language':
+                    return data.language || '';
+                case 'publicationTitle':
+                    return data.publicationTitle || '';
+                case 'volume':
+                    return data.volume || '';
+                case 'issue':
+                    return data.issue || '';
+                case 'pages':
+                    return data.pages || '';
+                case 'thesisType':
+                    return data.thesisType || '';
+                case 'university':
+                    return data.university || '';
+                case 'extra':
+                    return data.extra || '';
+                case 'creators':
+                    return Array.isArray(data.creators) ? data.creators.map(c => c.name || c.lastName || '') : [];
+                default:
+                    return undefined;
+            }
+        }
+
+        // HTML转义函数
+        function escapeHtml(text) {
+            if (!text) return '';
+            return String(text).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+        }
+
+        // 渲染单个字段
+        function renderField(value, template, isArray) {
+            // 空值检查，不显示空字段
+            if (value === undefined || value === null || value === '') return '';
+
+            // 处理多值字段
+            if (isArray && Array.isArray(value)) {
+                if (value.length === 0) return '';
+                var rendered = value.map(v => {
+                    var escaped = escapeHtml(v);
+                    var fieldHtml = template.replace('{{value}}', escaped);
+                    return fieldHtml ? '<span>' + fieldHtml + '</span>' : '';
+                }).join(' ');
+                return rendered ? '<div class="custom-field">' + rendered + '</div>' : '';
+            }
+
+            // 处理单值字段
+            var escaped = escapeHtml(value);
+            var fieldHtml = template.replace('{{value}}', escaped);
+            return fieldHtml ? '<div class="custom-field">' + fieldHtml + '</div>' : '';
+        }
+
+        function buildCreateNoteUrl(title, type, year, author, linkZotero, linkPdf, linkWeb, linkCloudPdf, itemKey, mode, uid, apiKey, data, templates) {
             var q = [
                 'title=' + encodeURIComponent(title),
                 'type=' + encodeURIComponent(type || ''),
@@ -185,6 +265,42 @@
                 'uid=' + encodeURIComponent(uid || ''),
                 'key=' + encodeURIComponent(apiKey || '')
             ];
+
+            // 如果有模板配置，渲染字段HTML
+            if (templates && data) {
+                var customFieldsHtml = '';
+
+                // 添加固定字段模板
+                if (templates.fixed) {
+                    for (var field in templates.fixed) {
+                        var template = templates.fixed[field];
+                        var value = getZoteroFieldValue(data, field);
+                        if (value !== undefined && value !== '') {
+                            var isArray = field === 'tags' || field === 'creators';
+                            var rendered = renderField(value, template, isArray);
+                            if (rendered) customFieldsHtml += rendered;
+                        }
+                    }
+                }
+
+                // 添加自定义字段模板
+                if (templates.custom && templates.custom.length > 0) {
+                    templates.custom.forEach(function(cf) {
+                        if (!cf.field || !cf.template) return;
+                        var value = getZoteroFieldValue(data, cf.field);
+                        if (value !== undefined && value !== '') {
+                            var isArray = cf.field === 'tags' || cf.field === 'creators';
+                            var rendered = renderField(value, cf.template, isArray);
+                            if (rendered) customFieldsHtml += rendered;
+                        }
+                    });
+                }
+
+                if (customFieldsHtml) {
+                    q.push('templatesHtml=' + encodeURIComponent(customFieldsHtml));
+                }
+            }
+
             if (linkPdf) q.push('lP=' + encodeURIComponent(linkPdf));
             if (linkWeb) q.push('lW=' + encodeURIComponent(linkWeb));
             if (linkCloudPdf) q.push('lC=' + encodeURIComponent(linkCloudPdf));
@@ -295,7 +411,14 @@
 
         async function run() {
             const q = $('q').value.trim();
-            let [mode, uid, slug, key] = ['mode', 'uid', 'slug', 'key'].map(i => $(i).value);
+            
+            // 从注入的配置或 DOM 中读取配置
+            var cfg = window.__mnConfig || {};
+            let mode = $('mode') ? $('mode').value : (cfg.mode || 'L');
+            let uid = $('uid') ? $('uid').value : (cfg.uid || '');
+            let slug = $('slug') ? $('slug').value : (cfg.slug || '');
+            let key = $('key') ? $('key').value : (cfg.key || '');
+            
             if (mode === 'L') uid = '0';
 
             const ui = { btn: $('btn'), log: $('log'), out: $('out') };
@@ -353,8 +476,9 @@
                         var addTitle = (d.title || T('Untitled')).replace(/"/g, '"');
                         var year = (d.date || '').substring(0, 4) || '';
                         var author = (d.creators && d.creators[0] && (d.creators[0].lastName || d.creators[0].name)) || T('unknown');
-                        var createNoteUrl = buildCreateNoteUrl(d.title || T('Untitled'), d.itemType, year, author, lItem, pdf ? ('zotero://open-pdf/library/items/' + pdf) : '', '', '', d.key, mode, uid, key);
-                        cards.push('<div class="list-item"><div class="list-item-body"><div class="list-title">' + addTitle + '</div><div class="meta-row"><span class="tag">' + d.itemType + '</span><span>' + author + '</span><span>' + (d.date || '') + '</span></div><div class="action-row">' + btns + '</div></div><a href="' + createNoteUrl + '" class="add-to-mn-btn" title="' + T('add_to_mn') + '">+</a></div>');
+                        var fieldTemplates = getFieldTemplates();
+                        var createNoteUrl = buildCreateNoteUrl(d.title || T('Untitled'), d.itemType, year, author, lItem, pdf ? ('zotero://open-pdf/library/items/' + pdf) : '', '', '', d.key, mode, uid, key, d, fieldTemplates);
+                        cards.push('<div class="list-item"><div class="list-item-body"><div class="list-title">' + addTitle + '</div><div class="meta-row"><span>' + author + '</span><span>' + (d.date || '') + '</span><span class="item-type-tag">' + d.itemType + '</span></div><div class="action-row">' + btns + '</div></div><a href="' + createNoteUrl + '" class="add-to-mn-btn" title="' + T('add_to_mn') + '">+</a></div>');
                     }
                 } else {
                     cards = await Promise.all(items.map(async function (item) {
@@ -380,7 +504,8 @@
                         var addTitle = (d.title || T('Untitled')).replace(/"/g, '"');
                         var year = (d.date || '').substring(0, 4) || '';
                         var author = (d.creators && d.creators[0] && (d.creators[0].lastName || d.creators[0].name)) || T('unknown');
-                        var createNoteUrl = buildCreateNoteUrl(d.title || T('Untitled'), d.itemType, year, author, lItem, pdf ? lPdf : '', cItem, pdf ? cPdf : '', d.key, mode, uid, key);
+                        var fieldTemplates = getFieldTemplates();
+                        var createNoteUrl = buildCreateNoteUrl(d.title || T('Untitled'), d.itemType, year, author, lItem, pdf ? lPdf : '', cItem, pdf ? cPdf : '', d.key, mode, uid, key, d, fieldTemplates);
                         var actionButtons = '';
                         if (pdf) {
                             var safeTitle = (d.title || T('Untitled')).replace(/"/g, '"');
@@ -388,7 +513,7 @@
                             actionButtons += '<a href="#" class="add-to-mn-btn download-pdf-btn" title="' + T('download_pdf') + '" data-uid="' + uid + '" data-attachment-key="' + pdf + '" data-file-name="' + safeTitle + '" data-api-key="' + safeKey + '">' + buildDownloadPdfIcon() + '</a>';
                         }
                         actionButtons += '<a href="' + createNoteUrl + '" class="add-to-mn-btn" title="' + T('add_to_mn') + '">+</a>';
-                        return '<div class="list-item"><div class="list-item-body"><div class="list-title">' + addTitle + '</div><div class="meta-row"><span class="tag">' + d.itemType + '</span><span>' + author + '</span><span>' + (d.date || '') + '</span></div><div class="action-row">' + btns + '</div></div><div class="list-item-actions">' + actionButtons + '</div></div>';
+                        return '<div class="list-item"><div class="list-item-body"><div class="list-title">' + addTitle + '</div><div class="meta-row"><span>' + author + '</span><span>' + (d.date || '') + '</span><span class="item-type-tag">' + d.itemType + '</span></div><div class="action-row">' + btns + '</div></div><div class="list-item-actions">' + actionButtons + '</div></div>';
                     }));
                 }
 

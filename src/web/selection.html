@@ -7,73 +7,21 @@
     <title>Zotero Connector - Selection</title>
     <link rel="stylesheet" href="common.css">
     <script src="i18n.js"></script>
-    <script>
-        // 初始化 HTML 静态文本
-        document.addEventListener('DOMContentLoaded', function() {
-            // Header
-            document.querySelector('h1').textContent = T('app_title');
-            document.querySelector('#settings-details > summary').textContent = T('settings');
-            
-            // Settings
-            var modeOptions = document.querySelectorAll('.mode-option');
-            modeOptions.forEach(function(opt, idx) {
-                var values = [T('local_api'), T('cloud_api')];
-                if (idx < values.length) opt.textContent = values[idx];
-            });
-            
-            document.getElementById('uid').placeholder = T('user_id');
-            document.getElementById('slug').placeholder = T('username');
-            document.getElementById('key').placeholder = T('api_key');
-            
-            // View switcher
-            var viewOptions = document.querySelectorAll('.view-option');
-            viewOptions.forEach(function(opt, idx) {
-                var values = [T('library'), T('selected_cards')];
-                if (idx < values.length) opt.textContent = values[idx];
-            });
-            
-            // Toolbar buttons
-            var btnSelect = document.getElementById('btn-select-in-zotero');
-            var btnExportAll = document.getElementById('btn-export-all-notes');
-            if (btnSelect) btnSelect.textContent = T('select_in_zotero');
-            if (btnExportAll) btnExportAll.textContent = T('push_all_notes');
-            
-            // Empty state
-            var emptyEl = document.getElementById('selected-empty');
-            if (emptyEl) emptyEl.textContent = T('loading');
-        });
-    </script>
 </head>
 
 <body>
 
     <header>
-        <div class="top-row">
-            <h1>Zotero Connector</h1>
-            <details id="settings-details">
-                <summary>Settings</summary>
-                <div class="config-panel">
-                    <input type="hidden" id="mode" value="L">
-                    <div class="mode-options">
-                        <span class="mode-option active" data-value="L" role="button">Local API</span>
-                        <span class="mode-option" data-value="C" role="button">Cloud API</span>
-                    </div>
-                    <input id="uid" placeholder="UserID" style="display:none">
-                    <input id="slug" placeholder="Username" style="display:none">
-                    <input id="key" type="password" placeholder="API Key" style="display:none">
-                </div>
-            </details>
-        </div>
-
         <div class="view-switcher">
             <span class="view-option" data-view="library" role="button">Library</span>
-            <span class="view-option active" data-view="selected" role="button">Selected Cards<span
-                    id="selected-reload-icon" class="selected-reload-icon" style="display: inline;"> ⟳</span></span>
+            <span class="view-option active" data-view="selected" role="button">Selected Cards</span>
+            <span class="view-option" data-view="settings" role="button">Settings</span>
         </div>
     </header>
 
     <div id="selected-panel" class="show">
-        <div id="selected-toolbar" class="selected-toolbar" style="display: none;">
+        <div id="selected-toolbar" class="selected-toolbar">
+            <button type="button" id="btn-refresh">Refresh</button>
             <button type="button" id="btn-select-in-zotero">Select in Zotero</button>
             <button type="button" id="btn-export-all-notes">Push All Notes</button>
         </div>
@@ -83,6 +31,29 @@
 
     <script src="common.js"></script>
     <script>
+        // 初始化翻译与Tab切换（selection页面独立处理）
+        (function initSelectionPage() {
+            var viewOptions = document.querySelectorAll('.view-option');
+            viewOptions.forEach(function(opt, idx) {
+                var values = [T('library'), T('selected_cards'), T('settings')];
+                if (idx < values.length) opt.textContent = values[idx];
+            });
+
+            var switcher = document.querySelectorAll('.view-option[data-view]');
+            switcher.forEach(function(el) {
+                el.addEventListener('click', function() {
+                    var view = this.getAttribute('data-view');
+                    if (view === 'library') {
+                        window.location.href = 'library.html';
+                    } else if (view === 'selected') {
+                        // 当前页，无操作
+                    } else if (view === 'settings') {
+                        window.location.href = 'settings.html';
+                    }
+                });
+            });
+        })();
+
         function loadSelectedNotes() {
             var emptyEl = $('selected-empty');
             if (emptyEl) emptyEl.style.display = 'block';
@@ -106,17 +77,16 @@
         }
 
         function getSyncConfig() {
-            var mode = $('mode') ? $('mode').value : '';
-            var uid = $('uid') ? String($('uid').value || '').trim() : '';
-            var key = $('key') ? String($('key').value || '').trim() : '';
+            var cfg = window.__mnConfig || {};
+            var mode = $('mode') ? $('mode').value : (cfg.mode || 'L');
+            var uid = $('uid') ? String($('uid').value || '').trim() : String(cfg.uid || '').trim();
+            var key = $('key') ? String($('key').value || '').trim() : String(cfg.key || '').trim();
+            mode = mode ? String(mode).trim() : 'L';
             return { mode: mode, uid: uid, key: key };
         }
 
         // Auto-load on page load
         loadSelectedNotes();
-        // Also bind reload icon if desired
-        var reloadIcon = $('selected-reload-icon');
-        if (reloadIcon) reloadIcon.onclick = loadSelectedNotes;
 
         window.onSelectedNotes = function () {
             var list = window.__selectedNotes;
@@ -124,8 +94,11 @@
             var toolbarEl = $('selected-toolbar');
             var emptyEl = $('selected-empty');
             var listEl = $('selected-list');
+            
+            updateToolbarState(list.length);
+            
             if (list.length === 0) {
-                if (toolbarEl) toolbarEl.style.display = 'none';
+                if (toolbarEl) toolbarEl.style.display = 'flex';
                 if (emptyEl) emptyEl.style.display = 'block';
                 if (emptyEl) emptyEl.textContent = T('no_literature_cards');
                 if (listEl) listEl.style.display = 'none';
@@ -170,9 +143,34 @@
             sendMNProtocol('mnzotero://exportLiteratureNotes?' + q.join('&'));
         }
 
-        (function initSelectedToolbar() {
+        function refreshSelectedNotes() {
+            loadSelectedNotes();
+        }
+
+        function updateToolbarState(listLength) {
             var btnSelect = $('btn-select-in-zotero');
             var btnExportAll = $('btn-export-all-notes');
+            
+            if (btnSelect) {
+                btnSelect.disabled = listLength === 0;
+            }
+            if (btnExportAll) {
+                btnExportAll.disabled = listLength === 0;
+            }
+        }
+
+        (function initSelectedToolbar() {
+            var btnRefresh = $('btn-refresh');
+            var btnSelect = $('btn-select-in-zotero');
+            var btnExportAll = $('btn-export-all-notes');
+            
+            if (btnRefresh) {
+                btnRefresh.textContent = T('refresh');
+                btnRefresh.addEventListener('click', function () {
+                    refreshSelectedNotes();
+                });
+            }
+            
             if (btnSelect) {
                 btnSelect.addEventListener('click', function () {
                     var list = window.__selectedNotes;
