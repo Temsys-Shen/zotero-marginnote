@@ -23,7 +23,7 @@ JSB.newAddon = function (mainPath) {
             var isOutsideScreen = (x + w <= 0) || (x >= frame.width) || (y + h <= 0) || (y >= frame.height);
 
             if (isOutsideScreen) {
-              var width = frame.width > 300 ? (300 + (frame.width - 300) / 2) : 300;
+              var width = 400;
               self.webController.view.frame = { x: (frame.width - width) / 2, y: frame.height - 500, width: width, height: 480 };
             } else {
               self.webController.view.frame = { x: x, y: y, width: w, height: h };
@@ -33,7 +33,7 @@ JSB.newAddon = function (mainPath) {
         }
 
         var frame = Application.sharedInstance().studyController(self.window).view.bounds;
-        var width = frame.width > 300 ? (300 + (frame.width - 300) / 2) : 300;
+        var width = 400;
         self.webController.view.frame = { x: (frame.width - width) / 2, y: frame.height - 500, width: width, height: 480 };
       };
       self.webController = SZWebViewController.new();
