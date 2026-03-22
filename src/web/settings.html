@@ -19,55 +19,72 @@
         </div>
     </header>
 
-    <main style="flex:1; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 16px; background-color: var(--surface);">
-        <div id="settings-view">
-            <input type="hidden" id="mode" value="L">
-            <div class="mode-options">
-                <span class="mode-option active" data-value="L" role="button">Local API</span>
-                <span class="mode-option" data-value="C" role="button">Cloud API</span>
-            </div>
-            <p id="api-mode-notice" class="api-mode-notice" style="display:none">使用Local API前，请在Zotero中开启“允许此计算机上的其他应用程序与Zotero通讯”。</p>
-            <input id="uid" placeholder="UserID" style="display:none">
-            <input id="slug" placeholder="Username" style="display:none">
-            <div class="password-container">
-                <input id="key" type="password" placeholder="API Key" style="display:none">
-                <span class="toggle-password" onclick="togglePasswordVisibility()" style="display:none"></span>
-            </div>
+    <main class="settings-main">
+        <div id="settings-view" class="settings-layout">
+            <nav class="settings-sidebar" aria-label="Settings">
+                <div class="settings-nav-item active" role="button" data-target="settings-section-api">API</div>
+                <div class="settings-nav-item" role="button" data-target="settings-section-templates">Templates</div>
+                <div class="settings-nav-item" role="button" data-target="settings-section-onboarding">Onboarding</div>
+            </nav>
 
-            <div class="api-actions">
-                <button type="button" id="btn-api-check" class="api-action-btn secondary" onclick="checkApiConnection()">检查链接</button>
-                <button type="button" id="btn-api-save" class="api-action-btn primary" onclick="saveApiConfig()">确认保存</button>
-            </div>
-            <p id="api-action-status" class="api-action-status" style="display:none"></p>
+            <div class="settings-content">
+                <section id="settings-section-api" class="settings-section">
+                    <h2 class="settings-section-title" id="settings-title-api">API</h2>
+                    <input type="hidden" id="mode" value="L">
+                    <div class="mode-options">
+                        <span class="mode-option active" data-value="L" role="button">Local API</span>
+                        <span class="mode-option" data-value="C" role="button">Cloud API</span>
+                    </div>
+                    <p id="api-mode-notice" class="api-mode-notice" style="display:none">使用Local API前，请在Zotero中开启“允许此计算机上的其他应用程序与Zotero通讯”。</p>
+                    <input id="uid" placeholder="UserID" style="display:none">
+                    <input id="slug" placeholder="Username" style="display:none">
+                    <div class="password-container">
+                        <input id="key" type="password" placeholder="API Key" style="display:none">
+                        <span class="toggle-password" onclick="togglePasswordVisibility()" style="display:none"></span>
+                    </div>
 
-            <div class="field-templates-panel">
-                <p class="field-templates-desc">Configure how Zotero fields are displayed in MarginNote cards.</p>
-                <div class="field-template-list" id="field-template-list">
-                    <!-- Fixed fields -->
-                    <div class="field-template-item">
-                        <span class="field-name">Author</span>
-                        <input type="text" class="field-template-input" data-field="author" placeholder="by {{value}}">
+                    <div class="api-actions">
+                        <button type="button" id="btn-api-check" class="api-action-btn secondary" onclick="checkApiConnection()">检查链接</button>
+                        <button type="button" id="btn-api-save" class="api-action-btn primary" onclick="saveApiConfig()">确认保存</button>
                     </div>
-                    <div class="field-template-item">
-                        <span class="field-name">Year</span>
-                        <input type="text" class="field-template-input" data-field="year" placeholder="({{value}})">
-                    </div>
-                    <div class="field-template-item">
-                        <span class="field-name">Type</span>
-                        <input type="text" class="field-template-input" data-field="type" placeholder='<z style="color:#9;font:1em;background:#eee;padding:.1em .5em;border-radius:.4em">{{value}}</z>'>
-                    </div>
-                    <hr>
-                    <div class="custom-field-section">
-                        <h4>Custom Fields</h4>
-                        <div class="custom-field-list" id="custom-field-list">
-                            <!-- Custom fields will be added here -->
+                    <p id="api-action-status" class="api-action-status" style="display:none"></p>
+                </section>
+
+                <section id="settings-section-templates" class="settings-section" style="display:none">
+                    <h2 class="settings-section-title" id="settings-title-templates">Templates</h2>
+                    <div class="field-templates-panel">
+                        <p class="field-templates-desc">Configure how Zotero fields are displayed in MarginNote cards.</p>
+                        <div class="field-template-list" id="field-template-list">
+                            <!-- Fixed fields -->
+                            <div class="field-template-item">
+                                <span class="field-name">Author</span>
+                                <input type="text" class="field-template-input" data-field="author" placeholder="by {{value}}">
+                            </div>
+                            <div class="field-template-item">
+                                <span class="field-name">Year</span>
+                                <input type="text" class="field-template-input" data-field="year" placeholder="({{value}})">
+                            </div>
+                            <div class="field-template-item">
+                                <span class="field-name">Type</span>
+                                <input type="text" class="field-template-input" data-field="type" placeholder='<z style="color:#9;font:1em;background:#eee;padding:.1em .5em;border-radius:.4em">{{value}}</z>'>
+                            </div>
+                            <hr>
+                            <div class="custom-field-section">
+                                <h4>Custom Fields</h4>
+                                <div class="custom-field-list" id="custom-field-list">
+                                    <!-- Custom fields will be added here -->
+                                </div>
+                                <button id="add-custom-field" class="btn-add-field">+ Add Field</button>
+                            </div>
                         </div>
-                        <button id="add-custom-field" class="btn-add-field">+ Add Field</button>
                     </div>
-                </div>
-            </div>
+                </section>
 
-            <button id="btn-open-onboarding" class="btn-open-onboarding" onclick="openOnboardingFromSettings()">查看新手引导</button>
+                <section id="settings-section-onboarding" class="settings-section" style="display:none">
+                    <h2 class="settings-section-title" id="settings-title-onboarding">Onboarding</h2>
+                    <button id="btn-open-onboarding" class="btn-open-onboarding" onclick="openOnboardingFromSettings()">查看新手引导</button>
+                </section>
+            </div>
         </div>
     </main>
 
@@ -106,6 +123,21 @@
             var saveBtn = document.getElementById('btn-api-save');
             if (saveBtn) saveBtn.textContent = T('confirm_save');
 
+            var navItems = document.querySelectorAll('.settings-nav-item');
+            navItems.forEach(function(item) {
+                var target = item.getAttribute('data-target');
+                if (target === 'settings-section-api') item.textContent = T('settings_nav_api');
+                if (target === 'settings-section-templates') item.textContent = T('settings_nav_templates');
+                if (target === 'settings-section-onboarding') item.textContent = T('settings_nav_onboarding');
+            });
+
+            var titleApi = document.getElementById('settings-title-api');
+            if (titleApi) titleApi.textContent = T('settings_nav_api');
+            var titleTemplates = document.getElementById('settings-title-templates');
+            if (titleTemplates) titleTemplates.textContent = T('settings_nav_templates');
+            var titleOnboarding = document.getElementById('settings-title-onboarding');
+            if (titleOnboarding) titleOnboarding.textContent = T('settings_nav_onboarding');
+
             var desc = document.querySelector('.field-templates-desc');
             if (desc) desc.textContent = T('field_templates_desc');
 
@@ -129,7 +161,40 @@
             
             // 显示 settings-view
             var settingsView = document.getElementById('settings-view');
-            if (settingsView) settingsView.style.display = 'block';
+            if (settingsView) settingsView.style.display = 'flex';
+        })();
+
+        // Settings sidebar navigation
+        (function initSettingsSidebar() {
+            var navItems = document.querySelectorAll('.settings-nav-item');
+            var sections = document.querySelectorAll('.settings-section');
+            if (!navItems.length || !sections.length) return;
+
+            function show(targetId) {
+                sections.forEach(function(sec) {
+                    sec.style.display = (sec.id === targetId) ? 'block' : 'none';
+                });
+                navItems.forEach(function(item) {
+                    var active = item.getAttribute('data-target') === targetId;
+                    if (active) item.classList.add('active');
+                    else item.classList.remove('active');
+                });
+                try { localStorage.setItem('mn_zotero_settings_nav', targetId); } catch (e) {}
+            }
+
+            navItems.forEach(function(item) {
+                item.addEventListener('click', function() {
+                    var target = this.getAttribute('data-target');
+                    if (target) show(target);
+                });
+            });
+
+            var initial = 'settings-section-api';
+            try {
+                var saved = localStorage.getItem('mn_zotero_settings_nav');
+                if (saved) initial = saved;
+            } catch (e) {}
+            show(initial);
         })();
 
         // View switcher logic for settings page

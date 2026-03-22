@@ -87,7 +87,10 @@ var Si18n = (function () {
     "onboarding_step_3": "返回文献库搜索条目并点击+创建卡片。",
     "onboarding_later": "我知道了",
     "onboarding_go_settings": "去设置",
-    "reopen_onboarding": "查看新手引导"
+    "reopen_onboarding": "查看新手引导",
+    "settings_nav_api": "API配置",
+    "settings_nav_templates": "字段模板",
+    "settings_nav_onboarding": "新手引导"
   };
 
   // 翻译数据（英文）
@@ -172,7 +175,10 @@ var Si18n = (function () {
     "onboarding_step_3": "Back to Library, search items, then click + to create a card.",
     "onboarding_later": "Got it",
     "onboarding_go_settings": "Go Settings",
-    "reopen_onboarding": "View Beginner Guide"
+    "reopen_onboarding": "View Beginner Guide",
+    "settings_nav_api": "API",
+    "settings_nav_templates": "Templates",
+    "settings_nav_onboarding": "Onboarding"
   };
 
   // 当前使用的翻译数据 - 默认使用中文

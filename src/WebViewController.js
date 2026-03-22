@@ -4,6 +4,9 @@
 var SZWebUIHandler = class {
   static setupUI(controller) {
     const self = controller;
+    const MIN_WIDTH = 400;
+    const DEFAULT_WIDTH = 400;
+    const DEFAULT_HEIGHT = 480;
     // 1. View Setup
     self.navigationItem.title = t('window_title');
     self.view.backgroundColor = UIColor.clearColor();
@@ -14,8 +17,8 @@ var SZWebUIHandler = class {
     self.view.layer.masksToBounds = false;
 
     const bounds = self.view.bounds;
-    const initWidth = bounds.width > 0 ? bounds.width : 300;
-    const initHeight = bounds.height > 0 ? bounds.height : 400;
+    const initWidth = bounds.width > 0 ? Math.max(MIN_WIDTH, bounds.width) : DEFAULT_WIDTH;
+    const initHeight = bounds.height > 0 ? bounds.height : DEFAULT_HEIGHT;
 
     self._isMaximized = false;
 
@@ -118,6 +121,7 @@ var SZWebUIHandler = class {
 
   static handleResize(controller, recognizer) {
     const self = controller;
+    const MIN_WIDTH = 400;
     const location = recognizer.locationInView(self.view.superview);
     if (recognizer.state === 1) { // Began
       self._resizeStartLocation = location;
@@ -128,7 +132,7 @@ var SZWebUIHandler = class {
       const dx = location.x - self._resizeStartLocation.x;
       const dy = location.y - self._resizeStartLocation.y;
 
-      let newWidth = Math.max(250, self._resizeStartFrame.width + dx);
+      let newWidth = Math.max(MIN_WIDTH, self._resizeStartFrame.width + dx);
       let newHeight = Math.max(300, self._resizeStartFrame.height + dy);
 
       const superviewBounds = self.view.superview ? self.view.superview.bounds : { x: 0, y: 0, width: 1920, height: 1080 };
