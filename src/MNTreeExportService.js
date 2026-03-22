@@ -29,6 +29,16 @@ var MNTreeExportService = class {
 
   static textToHtml(value) {
     if (!value) return '';
+    // If marked is defined (it should be since we require'd it), parse markdown!
+    if (typeof marked !== 'undefined') {
+      try {
+        return marked.parse(value);
+      } catch (e) {
+        console.log("marked parse error: " + e);
+        // fallback
+      }
+    }
+    // Fallback if marked is missing for some reason
     return MNTreeExportService.escapeHtml(value).replace(/\r\n/g, '\n').replace(/\n/g, '<br>');
   }
 
@@ -40,6 +50,20 @@ var MNTreeExportService = class {
       h += (h << 1) + (h << 4) + (h << 7) + (h << 8) + (h << 24);
     }
     return (h >>> 0).toString(16);
+  }
+
+  static extractCleanTitle(note) {
+    if (!note || note.noteTitle === undefined || note.noteTitle === null) return 'Untitled';
+    let t = String(note.noteTitle);
+    // 移除所有 {{xxx}} 格式的文本
+    t = t.replace(/\{\{.*?\}\}/g, '').trim();
+    // 移除空白字符和多余的分号
+    t = t.replace(/(;\s*)+/g, ';').trim();
+    // 去掉最后一个分号
+    if (t.endsWith(';')) {
+      t = t.slice(0, -1).trim();
+    }
+    return t || 'Untitled';
   }
 
   static collectSegments(rootNote) {
@@ -67,19 +91,18 @@ var MNTreeExportService = class {
       if (!text && c.html !== undefined) text = typeof c.html === 'function' ? c.html() : c.html;
       text = text ? String(text).trim() : '';
       if (!text) continue;
-      let markdown = false;
-      if (c.markdown !== undefined) markdown = !!(typeof c.markdown === 'function' ? c.markdown() : c.markdown);
+      let isMarkdown = false;
+      if (c.markdown !== undefined) isMarkdown = !!(typeof c.markdown === 'function' ? c.markdown() : c.markdown);
+      
       const bodyHtml = MNTreeExportService.textToHtml(text);
-      const commentType = markdown ? 'markdown' : 'text';
+      const commentType = isMarkdown ? 'markdown' : 'text';
       blocks.push(`<div data-mn-comment-type="${commentType}">${bodyHtml}</div>`);
     }
     return blocks;
   }
 
   static buildNodeSegment(note, pathTokens) {
-    const title = note && note.noteTitle !== undefined && note.noteTitle !== null
-      ? String(note.noteTitle)
-      : 'Untitled';
+    const title = MNTreeExportService.extractCleanTitle(note);
     const noteId = String(note && note.noteId ? note.noteId : '');
     const path = pathTokens.length > 0 ? pathTokens.join('.') : 'root';
     const titleHtml = MNTreeExportService.escapeHtml(title);
@@ -100,16 +123,20 @@ var MNTreeExportService = class {
     if (!note.allNoteText || typeof note.allNoteText !== 'function') return '';
     try {
       const text = note.allNoteText();
-      return text === undefined || text === null ? '' : String(text).trim();
+      if (!text) return '';
+      let str = String(text);
+      let lines = str.split('\n');
+      if (lines.length > 0) {
+        lines.shift(); // 只需要删除allNoteText的第一行
+      }
+      return lines.join('\n').trim();
     } catch (e) {
       return '';
     }
   }
 
   static buildRootNotePayload(rootChildNote, context) {
-    const rootTitle = rootChildNote && rootChildNote.noteTitle !== undefined && rootChildNote.noteTitle !== null
-      ? String(rootChildNote.noteTitle)
-      : 'Untitled';
+    const rootTitle = MNTreeExportService.extractCleanTitle(rootChildNote);
     const rootChildId = String(rootChildNote && rootChildNote.noteId ? rootChildNote.noteId : '');
     const rootPath = context && context.rootPath ? String(context.rootPath) : '';
     const literatureNoteId = context && context.literatureNoteId ? String(context.literatureNoteId) : '';
