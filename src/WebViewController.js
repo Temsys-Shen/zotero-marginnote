@@ -490,7 +490,7 @@ var SZZoteroBridge = class {
     const pluginVersion = '0.5.0';
     const summary = { created: 0, updated: 0, deletedDuplicates: 0, failed: 0, empty: 0, total: list.length, authFailed: false };
 
-    Application.sharedInstance().showHUD(t('pushing_notes'), self.view, 1.2);
+    Application.sharedInstance().waitHUDOnView(t('pushing_notes'), self.view);
 
     let chain = Promise.resolve();
     list.forEach((target) => {
@@ -526,12 +526,14 @@ var SZZoteroBridge = class {
     });
 
     chain.then(() => {
+      Application.sharedInstance().stopWaitHUDOnView(self.view);
       if (summary.authFailed) {
         Application.sharedInstance().showHUD(t('authentication_failed') + ', stopped. ' + t('found_items').replace('{count}', summary.created + ', ' + t('updated') + ' ' + summary.updated + ', ' + t('cleaned') + ' ' + summary.deletedDuplicates + ', ' + t('failed') + ' ' + summary.failed), self.view, 3);
         return;
       }
       Application.sharedInstance().showHUD(t('push_complete') + '. ' + t('found_items').replace('{count}', summary.created + ', ' + t('updated') + ' ' + summary.updated + ', ' + t('cleaned') + ' ' + summary.deletedDuplicates + ', ' + t('failed') + ' ' + summary.failed + ', ' + t('empty') + ' ' + summary.empty) + '.', self.view, 3);
     }).catch((err) => {
+      Application.sharedInstance().stopWaitHUDOnView(self.view);
       const msg = String((err && err.message) ? err.message : err);
       Application.sharedInstance().showHUD(t('push_failed') + ': ' + msg, self.view, 3);
     });

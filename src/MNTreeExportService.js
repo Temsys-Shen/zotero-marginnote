@@ -126,8 +126,10 @@ var MNTreeExportService = class {
       if (!text) return '';
       let str = String(text);
       let lines = str.split('\n');
-      if (lines.length > 0) {
-        lines.shift(); // 只需要删除allNoteText的第一行
+      
+      const rawTitle = note.noteTitle ? String(note.noteTitle).trim() : '';
+      if (rawTitle && lines.length > 0) {
+        lines.shift(); // 如果标题不为空，则删除由标题和标签组成的 allNoteText 的第一行
       }
       return lines.join('\n').trim();
     } catch (e) {
