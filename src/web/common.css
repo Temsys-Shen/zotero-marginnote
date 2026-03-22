@@ -220,6 +220,53 @@ select:focus {
   line-height: 1.4;
 }
 
+.api-actions {
+  display: flex;
+  gap: 8px;
+  margin: 10px 0 6px;
+}
+
+.api-action-btn {
+  flex: 1;
+  border: none;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  height: 34px;
+  padding: 0 12px;
+  cursor: pointer;
+}
+
+.api-action-btn.primary {
+  background: var(--accent);
+  color: var(--surface);
+}
+
+.api-action-btn.secondary {
+  background: var(--input-bg);
+  color: var(--text);
+}
+
+.api-action-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.api-action-status {
+  margin: 0 2px 8px;
+  font-size: 12px;
+  line-height: 1.35;
+  color: var(--sub);
+}
+
+.api-action-status.success {
+  color: var(--green);
+}
+
+.api-action-status.error {
+  color: #ff3b30;
+}
+
 .mode-option {
   flex: 1;
   padding: 6px 4px;

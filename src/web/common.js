@@ -37,6 +37,10 @@ function upd() {
 (function initModeOptions() {
     var opts = document.querySelectorAll('.mode-option');
     var modeInput = $('mode');
+    var apiCheckBtn = $('btn-api-check');
+    var apiSaveBtn = $('btn-api-save');
+    var apiStatusEl = $('api-action-status');
+    var apiDirty = false;
 
     function loadConfig(config) {
         if (!config) return;
@@ -52,6 +56,8 @@ function upd() {
             }
         });
         upd();
+        apiDirty = false;
+        updateApiSaveButtonState();
     }
 
     // Initial load from injected config if present
@@ -68,24 +74,45 @@ function upd() {
         }
     };
 
-    // Save changes automatically via protocol
+    function setApiStatus(text, kind) {
+        if (!apiStatusEl) return;
+        apiStatusEl.style.display = text ? 'block' : 'none';
+        apiStatusEl.textContent = text || '';
+        apiStatusEl.classList.remove('success');
+        apiStatusEl.classList.remove('error');
+        if (kind) apiStatusEl.classList.add(kind);
+    }
+
+    function updateApiSaveButtonState() {
+        if (!apiSaveBtn) return;
+        apiSaveBtn.disabled = !apiDirty;
+    }
+
+    function markApiDirty() {
+        apiDirty = true;
+        updateApiSaveButtonState();
+    }
+
+    function readApiConfigFromDom() {
+        var cfg = window.__mnConfig || {};
+        var mode = modeInput ? String(modeInput.value || '').trim() : String(cfg.mode || 'L').trim();
+        if (!API[mode]) mode = 'L';
+        var uid = $('uid') ? String($('uid').value || '').trim() : String(cfg.uid || '').trim();
+        var slug = $('slug') ? String($('slug').value || '').trim() : String(cfg.slug || '').trim();
+        var key = $('key') ? String($('key').value || '').trim() : String(cfg.key || '').trim();
+        return { mode: mode, uid: uid, slug: slug, key: key };
+    }
+
+    // Mark dirty on edit (no auto-save)
     ['uid', 'slug', 'key'].forEach(id => {
         var el = $(id);
-        if (el) {
-            var handleConfigEdit = function () {
-                setConfigValue(id, this.value);
-
-                // Visual feedback
-                this.classList.remove('save-success');
-                void this.offsetWidth; // Trigger reflow
-                this.classList.add('save-success');
-
-                if (window.resetFilterOptions) window.resetFilterOptions();
-                if (window.loadFilters) window.loadFilters();
-            };
-            el.addEventListener('input', handleConfigEdit);
-            el.addEventListener('change', handleConfigEdit);
-        }
+        if (!el) return;
+        var onEdit = function () {
+            markApiDirty();
+            setApiStatus('');
+        };
+        el.addEventListener('input', onEdit);
+        el.addEventListener('change', onEdit);
     });
 
     if (modeInput) {
@@ -93,13 +120,86 @@ function upd() {
             el.addEventListener('click', function () {
                 var v = this.getAttribute('data-value');
                 modeInput.value = v;
-                setConfigValue('mode', v);
                 opts.forEach(function (o) { o.classList.remove('active'); });
                 this.classList.add('active');
                 upd();
+                markApiDirty();
+                setApiStatus('');
             });
         });
     }
+
+    window.saveApiConfig = function saveApiConfig() {
+        var next = readApiConfigFromDom();
+        setConfigValue('mode', next.mode);
+        setConfigValue('uid', next.uid);
+        setConfigValue('slug', next.slug);
+        setConfigValue('key', next.key);
+
+        window.__mnConfig = window.__mnConfig || {};
+        window.__mnConfig.mode = next.mode;
+        window.__mnConfig.uid = next.uid;
+        window.__mnConfig.slug = next.slug;
+        window.__mnConfig.key = next.key;
+
+        apiDirty = false;
+        updateApiSaveButtonState();
+
+        if (apiSaveBtn) {
+            apiSaveBtn.classList.remove('save-success');
+            void apiSaveBtn.offsetWidth;
+            apiSaveBtn.classList.add('save-success');
+        }
+        setApiStatus((typeof T === 'function') ? T('save_success') : 'Saved', 'success');
+    };
+
+    window.checkApiConnection = async function checkApiConnection() {
+        var cfg = readApiConfigFromDom();
+        var mode = cfg.mode;
+        var uid = cfg.uid;
+        var key = cfg.key;
+
+        if (mode === 'C' && !uid) {
+            setApiStatus((typeof T === 'function') ? T('missing_user_id') : 'Missing user id', 'error');
+            return false;
+        }
+        if (mode === 'C' && !key) {
+            setApiStatus((typeof T === 'function') ? T('missing_api_key') : 'Missing api key', 'error');
+            return false;
+        }
+
+        var headers = { 'Zotero-API-Version': 3 };
+        if (mode === 'C' && key) headers['Zotero-API-Key'] = key;
+        if (mode === 'L') uid = '0';
+
+        var doFetch = mode === 'L' ? localFetch : function (url, opts) { return fetch(url, opts); };
+        var url = API[mode] + '/' + encodeURIComponent(uid) + '/collections?limit=1';
+
+        setApiStatus((typeof T === 'function') ? T('checking_connection') : 'Checking...', '');
+        if (apiCheckBtn) apiCheckBtn.disabled = true;
+        try {
+            var res = await doFetch(url, { headers: headers });
+            if (res && res.ok) {
+                setApiStatus((typeof T === 'function') ? T('connection_success') : 'OK', 'success');
+                return true;
+            }
+            var status = res && typeof res.status === 'number' ? res.status : 0;
+            if (status === 401 || status === 403) {
+                setApiStatus((typeof T === 'function') ? T('auth_failed') : 'Auth failed', 'error');
+                return false;
+            }
+            setApiStatus((typeof T === 'function') ? T('connection_failed') : 'Connection failed', 'error');
+            return false;
+        } catch (e) {
+            setApiStatus((typeof T === 'function') ? T('connection_failed') : 'Connection failed', 'error');
+            return false;
+        } finally {
+            if (apiCheckBtn) apiCheckBtn.disabled = false;
+        }
+    };
+
+    // Initial state for new buttons (if present)
+    updateApiSaveButtonState();
 })();
 
 /**

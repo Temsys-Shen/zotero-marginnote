@@ -34,6 +34,12 @@
                 <span class="toggle-password" onclick="togglePasswordVisibility()" style="display:none"></span>
             </div>
 
+            <div class="api-actions">
+                <button type="button" id="btn-api-check" class="api-action-btn secondary" onclick="checkApiConnection()">检查链接</button>
+                <button type="button" id="btn-api-save" class="api-action-btn primary" onclick="saveApiConfig()">确认保存</button>
+            </div>
+            <p id="api-action-status" class="api-action-status" style="display:none"></p>
+
             <div class="field-templates-panel">
                 <p class="field-templates-desc">Configure how Zotero fields are displayed in MarginNote cards.</p>
                 <div class="field-template-list" id="field-template-list">
@@ -94,6 +100,11 @@
             if (addFieldBtn) addFieldBtn.textContent = T('add_field');
             var openOnboardingBtn = document.getElementById('btn-open-onboarding');
             if (openOnboardingBtn) openOnboardingBtn.textContent = T('reopen_onboarding');
+
+            var checkBtn = document.getElementById('btn-api-check');
+            if (checkBtn) checkBtn.textContent = T('check_link');
+            var saveBtn = document.getElementById('btn-api-save');
+            if (saveBtn) saveBtn.textContent = T('confirm_save');
 
             var desc = document.querySelector('.field-templates-desc');
             if (desc) desc.textContent = T('field_templates_desc');
