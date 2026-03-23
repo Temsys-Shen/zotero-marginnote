@@ -332,7 +332,7 @@
             if (colContainer) colContainer.innerHTML = '';
             
             try {
-                var colRes = await doFetch(base + '/collections', { headers: headers });
+                var colRes = await doFetch(base + '/collections?limit=1000', { headers: headers });
                 if (colRes.ok) {
                     var colls = await colRes.json();
                     if (Array.isArray(colls) && colContainer) {
@@ -342,7 +342,7 @@
                 }
             } catch (e) { }
             try {
-                var tagRes = await doFetch(base + '/tags', { headers: headers });
+                var tagRes = await doFetch(base + '/tags?limit=1000', { headers: headers });
                 if (tagRes.ok) {
                     var tags = await tagRes.json();
                     if (Array.isArray(tags)) {
@@ -666,7 +666,14 @@
                 
                 window.MNAvailableTagsSet = extractedTags;
                 var currentSearchTerm = $('tag-filter-input') ? $('tag-filter-input').value : '';
-                renderTagsList(extractedTags, currentSearchTerm);
+                
+                // USER REQUEST: 如果当前没选择标签，且collection是all的话，显示全部标签，一个都不要隐藏
+                // 也要考虑搜索词 q。如果 q 为空才显示全部。
+                if (!collectionKey && !selectedTags.length && !q) {
+                    renderTagsList(null, currentSearchTerm);
+                } else {
+                    renderTagsList(extractedTags, currentSearchTerm);
+                }
 
                 if (!items.length) { ui.log.innerText = (typeof T === 'function' ? T('no_matches_found') : 'No matches found'); return; }
                 ui.log.innerText = `Fetching attachments for ${items.length} items...`;
