@@ -32,6 +32,47 @@ var MNTreeExportService = class {
     // If marked is defined (it should be since we require'd it), parse markdown!
     if (typeof marked !== 'undefined') {
       try {
+        if (!MNTreeExportService._markedMathConfigured) {
+          MNTreeExportService._markedMathConfigured = true;
+          marked.use({
+            extensions: [
+              {
+                name: 'blockMath',
+                level: 'block',
+                start(src) { return src.indexOf('$$'); },
+                tokenizer(src, tokens) {
+                  const match = /^\$\$[\s\S]*?\$\$/.exec(src);
+                  if (match) {
+                    return {
+                      type: 'blockMath',
+                      raw: match[0]
+                    };
+                  }
+                },
+                renderer(token) {
+                  return `<pre class="math">${token.raw}</pre>\n`;
+                }
+              },
+              {
+                name: 'inlineMath',
+                level: 'inline',
+                start(src) { return src.indexOf('$'); },
+                tokenizer(src, tokens) {
+                  const match = /^\$(?!\$)[\s\S]+?\$/.exec(src);
+                  if (match) {
+                    return {
+                      type: 'inlineMath',
+                      raw: match[0]
+                    };
+                  }
+                },
+                renderer(token) {
+                  return `<span class="math">${token.raw}</span>`;
+                }
+              }
+            ]
+          });
+        }
         return marked.parse(value);
       } catch (e) {
         console.log("marked parse error: " + e);
