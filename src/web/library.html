@@ -19,21 +19,36 @@
         </div>
     </header>
 
-    <div id="library-view">
-        <div class="search-bar">
-            <input id="q" placeholder="Keywords (Title, Author, Year)..." onkeydown="event.key=='Enter'&&run()">
-            <button id="btn" onclick="run()">Search</button>
+    <div id="library-layout">
+        <div id="sidebar">
+            <div id="collections-container">
+                <div class="sidebar-header">Collections</div>
+                <div id="collections-tree"></div>
+            </div>
+            <div id="sidebar-v-resizer"></div>
+            <div id="tags-container">
+                <div class="sidebar-header">Tags</div>
+                <div class="tag-search-bar">
+                    <input type="text" id="tag-filter-input" placeholder="Filter tags...">
+                </div>
+                <div id="tags-list"></div>
+                <div id="tags-loading-mask" class="hidden"></div>
+            </div>
         </div>
-        <div class="filter-row">
-            <select id="filter-collection">
-                <option value="">All</option>
-            </select>
-            <select id="filter-tag" multiple size="4">
-            </select>
+        
+        <div id="sidebar-resizer">
+            <div id="sidebar-toggle-btn" title="Toggle Sidebar">◀</div>
         </div>
-        <div id="content-area">
-            <div id="log">Ready to search.</div>
-            <div id="out"></div>
+
+        <div id="main-content">
+            <div class="search-bar">
+                <input id="q" placeholder="Keywords (Title, Author, Year)..." onkeydown="event.key=='Enter'&&run()">
+                <button id="btn" onclick="run()">Search</button>
+            </div>
+            <div id="content-area">
+                <div id="log">Ready to search.</div>
+                <div id="out"></div>
+            </div>
         </div>
     </div>
 
@@ -86,15 +101,221 @@
         })();
     </script>
     <script>
+        window.MNCurrentCollection = '';
+        window.MNSelectedTags = [];
+        window.MNAllTags = [];
+        window.MNAvailableTagsSet = null;
+
         function resetFilterOptions() {
-            var colSelect = $('filter-collection');
-            var tagSelect = $('filter-tag');
-            if (colSelect) { colSelect.innerHTML = '<option value="">' + T('all') + '</option>'; }
-            if (tagSelect) { tagSelect.innerHTML = ''; }
+            window.MNCurrentCollection = '';
+            window.MNSelectedTags = [];
+            window.MNAllTags = [];
+            window.MNAvailableTagsSet = null;
+            if ($('collections-tree')) $('collections-tree').innerHTML = '';
+            if ($('tags-list')) $('tags-list').innerHTML = '';
+            if ($('tag-filter-input')) $('tag-filter-input').value = '';
         }
 
+        function renderCollectionsTree(colls, container) {
+            var map = {};
+            var roots = [];
+            
+            var allItem = document.createElement('div');
+            allItem.className = 'collection-item' + (window.MNCurrentCollection === '' ? ' active' : '');
+            allItem.innerHTML = '<span class="collection-toggle empty"></span><span class="collection-icon">📚</span>' + escapeHtml((typeof T === 'function') ? T('all') : 'All');
+            allItem.onclick = function() {
+                window.MNCurrentCollection = '';
+                document.querySelectorAll('.collection-item').forEach(el => el.classList.remove('active'));
+                this.classList.add('active');
+                run();
+            };
+            container.appendChild(allItem);
+
+            colls.forEach(function(c) {
+                map[c.key] = { key: c.key, name: (c.data && c.data.name) ? c.data.name : c.key, parent: c.data ? c.data.parentCollection : false, children: [] };
+            });
+            colls.forEach(function(c) {
+                var d = map[c.key];
+                if (d.parent && map[d.parent]) {
+                    map[d.parent].children.push(d);
+                } else {
+                    roots.push(d);
+                }
+            });
+
+            var ul = document.createElement('ul');
+            ul.className = 'collection-tree';
+            roots.forEach(function(root) {
+                ul.appendChild(createCollectionNode(root));
+            });
+            container.appendChild(ul);
+        }
+
+        function createCollectionNode(nodeData) {
+            var li = document.createElement('li');
+            li.className = 'collection-node';
+            
+            var itemContent = document.createElement('div');
+            itemContent.className = 'collection-item' + (window.MNCurrentCollection === nodeData.key ? ' active' : '');
+            
+            var hasChildren = nodeData.children && nodeData.children.length > 0;
+            var toggle = document.createElement('span');
+            toggle.className = 'collection-toggle' + (hasChildren ? '' : ' empty');
+            toggle.textContent = hasChildren ? '▶' : '';
+            
+            var icon = document.createElement('span');
+            icon.className = 'collection-icon';
+            icon.textContent = '📁';
+            
+            var text = document.createTextNode(nodeData.name);
+            
+            itemContent.appendChild(toggle);
+            itemContent.appendChild(icon);
+            itemContent.appendChild(text);
+            li.appendChild(itemContent);
+            
+            var childrenUl = null;
+            if (hasChildren) {
+                childrenUl = document.createElement('ul');
+                childrenUl.className = 'collection-children';
+                nodeData.children.forEach(function(child) {
+                    childrenUl.appendChild(createCollectionNode(child));
+                });
+                li.appendChild(childrenUl);
+            }
+            
+            toggle.onclick = function(e) {
+                e.stopPropagation();
+                if (hasChildren) {
+                    toggle.classList.toggle('expanded');
+                    childrenUl.classList.toggle('expanded');
+                }
+            };
+            
+            itemContent.onclick = function() {
+                window.MNCurrentCollection = nodeData.key;
+                document.querySelectorAll('.collection-item').forEach(el => el.classList.remove('active'));
+                itemContent.classList.add('active');
+                run();
+            };
+            
+            return li;
+        }
+
+        function renderTagsList(availableTagsSet, searchTerm) {
+            var container = $('tags-list');
+            if (!container) return;
+            container.innerHTML = '';
+            
+            var searchFocus = searchTerm ? searchTerm.toLowerCase() : '';
+            var tagsToRender = window.MNAllTags || [];
+            
+            tagsToRender.forEach(function(tagName) {
+                var isSelected = window.MNSelectedTags.includes(tagName);
+                
+                if (searchFocus && tagName.toLowerCase().indexOf(searchFocus) === -1) {
+                    return; 
+                }
+                
+                var isAvailable = true;
+                if (availableTagsSet && !isSelected) {
+                    isAvailable = availableTagsSet.has(tagName);
+                }
+                
+                // USER REQUEST: tags不置灰，不可点的直接不显示
+                if (!isSelected && !isAvailable) return;
+                
+                var tagEl = document.createElement('span');
+                tagEl.className = 'sidebar-tag';
+                if (isSelected) tagEl.classList.add('active');
+                
+                tagEl.textContent = tagName;
+                tagEl.onclick = function() {
+                    if (isSelected) {
+                        window.MNSelectedTags = window.MNSelectedTags.filter(t => t !== tagName);
+                    } else {
+                        window.MNSelectedTags.push(tagName);
+                    }
+                    run();
+                };
+                container.appendChild(tagEl);
+            });
+        }
+
+        // Sidebar Resizing & Toggle Logic
+        (function initSidebarResizing() {
+            var resizer = $('sidebar-resizer');
+            var vResizer = $('sidebar-v-resizer');
+            var sidebar = $('sidebar');
+            var colContainer = $('collections-container');
+            var layout = $('library-layout');
+            var toggleBtn = $('sidebar-toggle-btn');
+            if (!resizer || !sidebar || !colContainer) return;
+
+            var isResizingH = false;
+            var isResizingV = false;
+
+            resizer.addEventListener('mousedown', function(e) {
+                if (e.target.id === 'sidebar-toggle-btn') return;
+                isResizingH = true;
+                resizer.classList.add('active');
+                document.body.style.cursor = 'col-resize';
+                e.preventDefault();
+            });
+
+            vResizer.addEventListener('mousedown', function(e) {
+                isResizingV = true;
+                vResizer.classList.add('active');
+                document.body.style.cursor = 'row-resize';
+                e.preventDefault();
+            });
+
+            window.addEventListener('mousemove', function(e) {
+                if (isResizingH) {
+                    var offsetLeft = layout.getBoundingClientRect().left;
+                    var newWidth = e.clientX - offsetLeft;
+                    if (newWidth >= 100 && newWidth <= 600) {
+                        sidebar.style.width = newWidth + 'px';
+                        sidebar.classList.remove('collapsed');
+                        if (toggleBtn) toggleBtn.textContent = '◀';
+                    }
+                } else if (isResizingV) {
+                    var offsetTop = sidebar.getBoundingClientRect().top;
+                    var newHeight = e.clientY - offsetTop;
+                    var minColHeight = 50;
+                    var maxColHeight = sidebar.clientHeight - 80;
+                    if (newHeight >= minColHeight && newHeight <= maxColHeight) {
+                        colContainer.style.flex = '0 0 ' + newHeight + 'px';
+                    }
+                }
+            });
+
+            window.addEventListener('mouseup', function() {
+                if (isResizingH) {
+                    isResizingH = false;
+                    resizer.classList.remove('active');
+                    document.body.style.cursor = '';
+                }
+                if (isResizingV) {
+                    isResizingV = false;
+                    vResizer.classList.remove('active');
+                    document.body.style.cursor = '';
+                }
+            });
+
+            if (toggleBtn) {
+                toggleBtn.onclick = function() {
+                    sidebar.classList.toggle('collapsed');
+                    if (sidebar.classList.contains('collapsed')) {
+                        toggleBtn.textContent = '▶';
+                    } else {
+                        toggleBtn.textContent = '◀';
+                    }
+                };
+            }
+        })();
+
         async function loadFilters() {
-            // 从注入的配置或 DOM 中读取配置
             var cfg = window.__mnConfig || {};
             var mode = $('mode') ? $('mode').value : (cfg.mode || 'L');
             if (!API[mode]) mode = 'L';
@@ -106,24 +327,17 @@
             if (mode === 'C' && key) headers['Zotero-API-Key'] = key;
             var base = API[mode] + '/' + uid;
             var doFetch = mode === 'L' ? localFetch : function (url, opts) { return fetch(url, opts); };
-            var colSelect = $('filter-collection');
-            var tagSelect = $('filter-tag');
-            if (!colSelect || !tagSelect) return;
-            colSelect.innerHTML = '<option value="">' + T('all') + '</option>';
-            tagSelect.innerHTML = '';
+            
+            var colContainer = $('collections-tree');
+            if (colContainer) colContainer.innerHTML = '';
+            
             try {
                 var colRes = await doFetch(base + '/collections', { headers: headers });
                 if (colRes.ok) {
                     var colls = await colRes.json();
-                    if (Array.isArray(colls)) {
-                        for (var c = 0; c < colls.length; c++) {
-                            var ckey = colls[c].key;
-                            var cname = (colls[c].data && colls[c].data.name) ? colls[c].data.name : (ckey || '');
-                            var opt = document.createElement('option');
-                            opt.value = ckey || '';
-                            opt.textContent = cname;
-                            colSelect.appendChild(opt);
-                        }
+                    if (Array.isArray(colls) && colContainer) {
+                        colContainer.innerHTML = '';
+                        renderCollectionsTree(colls, colContainer);
                     }
                 }
             } catch (e) { }
@@ -132,25 +346,17 @@
                 if (tagRes.ok) {
                     var tags = await tagRes.json();
                     if (Array.isArray(tags)) {
-                        for (var t = 0; t < tags.length; t++) {
-                            var tagName = tags[t].tag != null ? String(tags[t].tag) : '';
-                            if (!tagName) continue;
-                            var topt = document.createElement('option');
-                            topt.value = encodeURIComponent(tagName);
-                            topt.textContent = tagName;
-                            tagSelect.appendChild(topt);
-                        }
+                        window.MNAllTags = tags.map(function(t) { return t.tag; }).filter(Boolean);
+                        renderTagsList(window.MNAvailableTagsSet, $('tag-filter-input') ? $('tag-filter-input').value : '');
                     }
                 }
             } catch (e) { }
         }
 
-        // Panel show hook for library
         window.__onPanelShow = function() {
             loadFilters();
         };
         
-        // Config injection fallback for library page
         (function initConfigDrivenFilters() {
             var existingOnMNConfig = window.onMNConfig;
             window.onMNConfig = function() {
@@ -159,20 +365,9 @@
             };
         })();
 
-        // Initial config load for filters (if common.js loaded early)
-        var colSelect = $('filter-collection');
-        var tagSelect = $('filter-tag');
-        if (colSelect) colSelect.addEventListener('change', function () { this.blur(); });
-        if (tagSelect) {
-            tagSelect.addEventListener('change', function () {
-                var sel = this;
-                var selected = Array.from(sel.selectedOptions || []);
-                if (selected.length === 0) return;
-                for (var i = selected.length - 1; i >= 0; i--) sel.insertBefore(selected[i], sel.firstChild);
-                sel.classList.add('reorder-done', 'reorder-flash');
-                setTimeout(function () {
-                    sel.classList.remove('reorder-flash');
-                }, 200);
+        if ($('tag-filter-input')) {
+            $('tag-filter-input').addEventListener('input', function(e) {
+                renderTagsList(window.MNAvailableTagsSet, e.target.value);
             });
         }
 
@@ -426,31 +621,54 @@
             ui.btn.disabled = true;
             ui.out.innerHTML = '';
             ui.log.style.display = 'block';
-            ui.log.innerText = T('searching');
+            ui.log.innerText = (typeof T === 'function' ? T('searching') : 'Searching...');
+            
+            // USER REQUEST: 右侧正处于加载状态时，tag区域不可点击，要整体蒙灰并禁止点击
+            if ($('tags-loading-mask')) $('tags-loading-mask').classList.remove('hidden');
 
             var headers = { 'Zotero-API-Version': 3 };
             if (mode === 'C' && key) headers['Zotero-API-Key'] = key;
             const base = `${API[mode]}/${uid}`;
-            const doFetch = mode === 'L' ? localFetch : function (url, opts) { return fetch(url, opts); };
+            var doFetch = mode === 'L' ? localFetch : function (url, opts) { return fetch(url, opts); };
 
-            var colSelect = $('filter-collection');
-            var tagSelect = $('filter-tag');
-            var collectionKey = (colSelect && colSelect.value ? colSelect.value : '').trim();
-            var selectedTags = tagSelect && tagSelect.selectedOptions ? Array.from(tagSelect.selectedOptions).map(function (o) { return o.value; }) : [];
+            var collectionKey = window.MNCurrentCollection || '';
+            var selectedTags = window.MNSelectedTags || [];
             var path = collectionKey ? base + '/collections/' + collectionKey + '/items' : base + '/items';
             var params = ['limit=100'];
             if (q) params.push('q=' + encodeURIComponent(q));
-            for (var ti = 0; ti < selectedTags.length; ti++) { params.push('tag=' + selectedTags[ti]); }
+            
+            // USER REQUEST: 排除annotation
+            // Note: Zotero API doesn't strictly support negative itemType in all versions, 
+            // but we filter it in JS below. If we wanted to try and reduce payload:
+            // params.push('itemType=-annotation'); 
+
+            for (var ti = 0; ti < selectedTags.length; ti++) { params.push('tag=' + encodeURIComponent(selectedTags[ti])); }
             var queryString = params.length ? ('?' + params.join('&')) : '';
             var url = path + queryString;
 
             try {
                 var r1 = await doFetch(url, { headers: headers });
-                if (!r1.ok) throw new Error(T('connection_failed'));
+                if (!r1.ok) throw new Error((typeof T === 'function' ? T('connection_failed') : 'Connection failed'));
 
-                const items = (await r1.json()).filter(i => !['attachment', 'note'].includes(i.data.itemType));
+                const rawJson = await r1.json();
+                
+                // USER REQUEST: 排除 annotation
+                const items = rawJson.filter(i => i.data && !['attachment', 'note', 'annotation'].includes(i.data.itemType));
 
-                if (!items.length) { ui.log.innerText = T('no_matches_found'); return; }
+                var extractedTags = new Set();
+                items.forEach(function(item) {
+                    if (item.data && Array.isArray(item.data.tags)) {
+                        item.data.tags.forEach(function(t) {
+                            if (t.tag) extractedTags.add(t.tag);
+                        });
+                    }
+                });
+                
+                window.MNAvailableTagsSet = extractedTags;
+                var currentSearchTerm = $('tag-filter-input') ? $('tag-filter-input').value : '';
+                renderTagsList(extractedTags, currentSearchTerm);
+
+                if (!items.length) { ui.log.innerText = (typeof T === 'function' ? T('no_matches_found') : 'No matches found'); return; }
                 ui.log.innerText = `Fetching attachments for ${items.length} items...`;
 
                 var cards;
@@ -521,7 +739,11 @@
                 ui.log.style.display = 'none';
 
             } catch (e) { ui.log.innerText = 'Error: ' + e.message; }
-            finally { ui.btn.disabled = false; }
+            finally { 
+                ui.btn.disabled = false; 
+                // USER REQUEST: 右侧加载完成，隐藏蒙层
+                if ($('tags-loading-mask')) $('tags-loading-mask').classList.add('hidden');
+            }
         }
     </script>
 </body>

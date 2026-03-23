@@ -39,13 +39,22 @@ var SZWebUIHandler = class {
     self.titleBar.backgroundColor = UIColor.colorWithWhiteAlpha(0.96, 1);
     self.titleBar.autoresizingMask = (1 << 1);
 
-    self.titleLabel = new UILabel({ x: 10, y: 0, width: initWidth - 20, height: titleHeight });
+    self.titleLabel = new UILabel({ x: 40, y: 0, width: initWidth - 80, height: titleHeight });
     self.titleLabel.text = t('app_title');
     self.titleLabel.textAlignment = 1;
     self.titleLabel.font = UIFont.boldSystemFontOfSize(14);
     self.titleLabel.textColor = UIColor.darkGrayColor();
     self.titleLabel.autoresizingMask = (1 << 1);
     self.titleBar.addSubview(self.titleLabel);
+
+    // 2.1 Close Button (Native)
+    // Position it at the top left
+    self.closeButton = new UIButton({ x: 5, y: 0, width: titleHeight, height: titleHeight });
+    self.closeButton.setTitleForState("×", 0);
+    self.closeButton.setTitleColorForState(UIColor.grayColor(), 0);
+    self.closeButton.titleLabel.font = UIFont.systemFontOfSize(24);
+    self.closeButton.addTargetActionForControlEvents(self, "closeWindow", 1 << 0); // UIControlEventTouchDown
+    self.titleBar.addSubview(self.closeButton);
 
     const panRecognizer = new UIPanGestureRecognizer(self, "handlePan:");
     self.titleBar.addGestureRecognizer(panRecognizer);
@@ -833,6 +842,25 @@ var SZWebViewController = JSB.defineClass('SZWebViewController : UIViewControlle
     SZWebUIHandler.loadInitialPage(self);
   },
 
+  closeWindow: function () {
+    // 1. 立即隐藏视图，保证视觉上的“零延迟”
+    self.view.hidden = true;
+    
+    // 2. 同步更新状态，确保下一次点击图标时逻辑正确（不会需要点两次）
+    if (self.view.superview) {
+      self.view.removeFromSuperview();
+    }
+    NSUserDefaults.standardUserDefaults().setObjectForKey(false, 'marginnote_sample_w_on');
+
+    // 3. 异步刷新工具栏图标，避开主线程阻塞感
+    NSTimer.scheduledTimerWithTimeInterval(0, false, function () {
+      const targetWindow = (self.addon && self.addon.window) ? self.addon.window : self.addonWindow;
+      if (targetWindow) {
+        Application.sharedInstance().studyController(targetWindow).refreshAddonCommands();
+      }
+    });
+  },
+
   handlePan: function (recognizer) { SZWebUIHandler.handlePan(self, recognizer); },
   handleResize: function (recognizer) { SZWebUIHandler.handleResize(self, recognizer); },
   handleResizeDoubleTap: function () {
@@ -843,6 +871,7 @@ var SZWebViewController = JSB.defineClass('SZWebViewController : UIViewControlle
   handleTitleBarDoubleTap: function () { SZWebUIHandler.toggleMaximize(self); },
 
   viewWillAppear: function () {
+    self.view.hidden = false;
     self.webView.delegate = self;
     self.webView.evaluateJavaScript("typeof window.__onPanelShow==='function'&&window.__onPanelShow();", null);
   },
