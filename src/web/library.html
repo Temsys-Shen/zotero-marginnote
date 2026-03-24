@@ -255,22 +255,25 @@
             var isResizingH = false;
             var isResizingV = false;
 
-            resizer.addEventListener('mousedown', function(e) {
+            resizer.addEventListener('pointerdown', function(e) {
                 if (e.target.id === 'sidebar-toggle-btn') return;
                 isResizingH = true;
+                sidebar.classList.add('resizing');
+                resizer.setPointerCapture(e.pointerId);
                 resizer.classList.add('active');
                 document.body.style.cursor = 'col-resize';
                 e.preventDefault();
             });
 
-            vResizer.addEventListener('mousedown', function(e) {
+            vResizer.addEventListener('pointerdown', function(e) {
                 isResizingV = true;
+                vResizer.setPointerCapture(e.pointerId);
                 vResizer.classList.add('active');
                 document.body.style.cursor = 'row-resize';
                 e.preventDefault();
             });
 
-            window.addEventListener('mousemove', function(e) {
+            window.addEventListener('pointermove', function(e) {
                 if (isResizingH) {
                     var offsetLeft = layout.getBoundingClientRect().left;
                     var newWidth = e.clientX - offsetLeft;
@@ -290,14 +293,33 @@
                 }
             });
 
-            window.addEventListener('mouseup', function() {
+            window.addEventListener('pointerup', function(e) {
                 if (isResizingH) {
                     isResizingH = false;
+                    sidebar.classList.remove('resizing');
+                    resizer.releasePointerCapture(e.pointerId);
                     resizer.classList.remove('active');
                     document.body.style.cursor = '';
                 }
                 if (isResizingV) {
                     isResizingV = false;
+                    vResizer.releasePointerCapture(e.pointerId);
+                    vResizer.classList.remove('active');
+                    document.body.style.cursor = '';
+                }
+            });
+            
+            window.addEventListener('pointercancel', function(e) {
+                if (isResizingH) {
+                    isResizingH = false;
+                    sidebar.classList.remove('resizing');
+                    resizer.releasePointerCapture(e.pointerId);
+                    resizer.classList.remove('active');
+                    document.body.style.cursor = '';
+                }
+                if (isResizingV) {
+                    isResizingV = false;
+                    vResizer.releasePointerCapture(e.pointerId);
                     vResizer.classList.remove('active');
                     document.body.style.cursor = '';
                 }

@@ -47,10 +47,13 @@
 }
 
 /* 全局禁止选择，仅允许输入框 */
+html,
+body,
 * {
     -webkit-user-select: none;
     user-select: none;
     -webkit-touch-callout: none;
+    -webkit-tap-highlight-color: transparent;
 }
 
 input,
@@ -762,6 +765,10 @@ select:focus {
     overflow: hidden;
 }
 
+#sidebar.resizing {
+    transition: none;
+}
+
 #sidebar.collapsed {
     width: 0 !important;
     border-right: none;
@@ -780,6 +787,7 @@ select:focus {
     flex: 1;
     overflow-y: auto;
     min-height: 50px;
+    border-bottom: 1px solid var(--border);
 }
 
 #sidebar-v-resizer {
@@ -790,6 +798,7 @@ select:focus {
     transition: background-color 0.2s;
     z-index: 100;
     margin: -3px 0; /* visually overlap */
+    touch-action: none;
 }
 #sidebar-v-resizer:hover, #sidebar-v-resizer.active {
     background-color: var(--accent);
@@ -803,6 +812,7 @@ select:focus {
     z-index: 100;
     position: relative;
     margin-left: -5px; /* visually overlap with the border */
+    touch-action: none;
 }
 
 #sidebar-resizer:hover {

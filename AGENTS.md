@@ -8,22 +8,22 @@
 ## 文档优先(强制)
 
 - 若环境提供mn-docs-mcp(MCP),一动要用 `mndocs` 的mcp检索并以文档为准;不要凭记忆猜API/副作用。如果发现没有该mcp，可以提示用户安装MCP（根据不同的环境按照该启动命令来引导用户 `npx mn-docs-mcp`）
-- MCP不可用,一定要阅读在线文档(优先https://mn-docs.museday.top站点),仍不清楚就停止实现并向用户索取:官方文档片段/可运行示例/最小复现与期望行为。
+- MCP不可用,一定要阅读在线文档(优先<https://mn-docs.museday.top>站点),仍不清楚就停止实现并向用户索取:官方文档片段/可运行示例/最小复现与期望行为。
 - 开始编码前必须先查两篇:
-  - JavaScript原生环境(理解JSCore限制,如无 `fetch`/无DOM等)(https://mn-docs.museday.top/reference/js-runtime/)
-  - 全局与入口对象(Global Variables)(理解 `JSB`/`self`/`Application`/`Database`/`Note`等全局注入对象)(https://mn-docs.museday.top/reference/global/global-variables/)
+  - JavaScript原生环境(理解JSCore限制,如无 `fetch`/无DOM等)(<https://mn-docs.museday.top/reference/js-runtime/>)
+  - 全局与入口对象(Global Variables)(理解 `JSB`/`self`/`Application`/`Database`/`Note`等全局注入对象)(<https://mn-docs.museday.top/reference/global/global-variables/>)
 
 ## 运行时与能力差异(不要按前端思维)
 
 - 插件运行在JavaScriptCore环境:没有浏览器的 `window`/`document`/`fetch`/`localStorage`/`setTimeout`/`setInterval`等。
-- 网络请求不要用 `fetch`: 按文档使用系统导出的网络API(如NSURLConnection相关)与回调,响应体常见为 `NSData `。
+- 网络请求不要用 `fetch`: 按文档使用系统导出的网络API(如NSURLConnection相关)与回调,响应体常见为 `NSData ` 。
 - 环境无Base64解码等常用工具;涉及 `NSData`转文本/JSON时严格按文档做,不要自行臆断可用API。
 
 ## 结构与加载规则(强制)
 
 - `span`只做入口与导入:只允许在 `main.js`调用 `JSB.require(...)`，且只允许使用 `JSB.require(...)`，不得使用 `require`、`import`。`JSB.require(...)`的引入进入全局作用域，作用于所有脚本
-- 不要在 `main.js `里定义业务函数/方法;所有实现放到独立文件,再由 `main.js `通过 `JSB.require(...)`导入。
-- 除 `main.js `外任何文件禁止调用 `JSB.require(...)`(避免重复/污染全局导入行为)。
+- 不要在 `main.js ` 里定义业务函数/方法;所有实现放到独立文件,再由 `main.js ` 通过 `JSB.require(...)`导入。
+- 除 `main.js ` 外任何文件禁止调用 `JSB.require(...)`(避免重复/污染全局导入行为)。
 - 优先用ES6语法(除非与运行时不兼容);保持文件职责单一,不要把UI/数据/命令处理混在一起。
 
 ## 全局与入口对象要点(先查Global Variables页)
@@ -45,3 +45,4 @@
 
 - 日志统一用 `console.log`,不要用 `JSB.log`。
 - 构建无语法校验功能;改动后至少做一次人工检查(重新阅读代码)。
+
