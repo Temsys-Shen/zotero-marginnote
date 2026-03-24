@@ -841,7 +841,12 @@ var SZZoteroBridge = class {
 
     SZMNNetwork.fetch(url, { method: 'GET', headers: headers }).then((res) => {
       const data = res.json();
-      const filename = (data && data.filename) ? String(data.filename) : '';
+      // In Local API, data is { key: "...", data: { filename: "...", ... } }
+      let filename = params.filename ? String(params.filename) : '';
+      if (!filename && data && data.data && data.data.filename) {
+        filename = String(data.data.filename);
+      }
+      
       if (!filename) {
         self.webView.evaluateJavaScript('window.onMNDocumentCheck(\'' + attachmentKey + '\', null)', null);
         return;
@@ -892,11 +897,16 @@ var SZZoteroBridge = class {
     const count = SZZoteroBridge._getNSArrayCount(docs);
     if (count === 0) return null;
 
+    const targetLower = filename.toLowerCase();
+
     for (let i = 0; i < count; i++) {
       const doc = SZZoteroBridge._getNSArrayItem(docs, i);
       if (!doc) continue;
       const path = String(doc.pathFile || '');
-      if (path.indexOf(filename) !== -1) {
+      const pathLower = path.toLowerCase();
+      
+      // Precise path match (target filename is a substring of the full path)
+      if (pathLower.indexOf(targetLower) !== -1) {
         return String(doc.docMd5 || '');
       }
     }
@@ -917,15 +927,27 @@ var SZZoteroBridge = class {
     const count = SZZoteroBridge._getNSArrayCount(docs);
     if (count === 0) return results;
 
+    // Pre-normalize targets
+    const targetData = keys.map(k => {
+      return {
+        key: k,
+        lower: payload[k].toLowerCase()
+      };
+    });
+
     for (let i = 0; i < count; i++) {
         const doc = SZZoteroBridge._getNSArrayItem(docs, i);
         if (!doc) continue;
         const path = String(doc.pathFile || '');
-        for (let j = 0; j < keys.length; j++) {
-            const attachmentKey = keys[j];
-            const fname = payload[attachmentKey];
-            if (fname && path.indexOf(fname) !== -1) {
-                results[attachmentKey] = String(doc.docMd5 || '');
+        const pathLower = path.toLowerCase();
+
+        for (let j = 0; j < targetData.length; j++) {
+            const t = targetData[j];
+            if (results[t.key]) continue; // Already found
+
+            // Precise path match
+            if (pathLower.indexOf(t.lower) !== -1) {
+              results[t.key] = String(doc.docMd5 || '');
             }
         }
     }
