@@ -1,5 +1,9 @@
 const $ = i => document.getElementById(i);
 const API = { L: 'http://localhost:23119/api/users', C: 'https://api.zotero.org/users' };
+var lastLocalFailureTime = 0;
+// Local fetch queue to handle concurrency issues (mnzotero://fetch uses a single global window.__mnFetchPending)
+var __mnFetchQueue = [];
+var __mnFetchBusy = false;
 
 function setConfigValue(key, val) {
     var iframe = document.createElement('iframe');
@@ -16,19 +20,19 @@ function upd() {
     var modeEl = $('mode');
     var cfg = window.__mnConfig || {};
     var mode = modeEl ? modeEl.value : (cfg.mode || 'L');
-    const isC = mode === 'C';
+    
     var keyEl = $('key');
     var uidEl = $('uid');
     var slugEl = $('slug');
-    if (keyEl) keyEl.style.display = isC ? 'block' : 'none';
-    if (uidEl) uidEl.style.display = isC ? 'block' : 'none';
-    if (slugEl) slugEl.style.display = isC ? 'block' : 'none';
+    
+    // Always show Cloud config fields (since Local needs no config)
+    if (keyEl) keyEl.style.display = 'block';
+    if (uidEl) uidEl.style.display = 'block';
+    if (slugEl) slugEl.style.display = 'block';
+    
     var togglePassword = document.querySelector('.toggle-password');
-    if (togglePassword) togglePassword.style.display = isC ? 'block' : 'none';
-    var apiModeNotice = $('api-mode-notice');
-    if (apiModeNotice) apiModeNotice.style.display = isC ? 'none' : 'block';
-    if (window.resetFilterOptions) window.resetFilterOptions();
-    if (window.loadFilters) window.loadFilters();
+    if (togglePassword) togglePassword.style.display = 'block';
+    
 }
 
 /**
@@ -153,49 +157,61 @@ function upd() {
         setApiStatus((typeof T === 'function') ? T('save_success') : 'Saved', 'success');
     };
 
+    function setStatusLight(id, state) {
+        var light = $(id + '-light');
+        var text = $(id + '-status-text');
+        if (!light) return;
+        light.className = 'status-light ' + state;
+        if (text) {
+            if (state === 'connected') text.textContent = (typeof T === 'function') ? T('connected') : 'Connected';
+            else if (state === 'error') text.textContent = (typeof T === 'function') ? T('disconnected') : 'Disconnected';
+            else if (state === 'checking') text.textContent = (typeof T === 'function') ? T('checking_connection') : 'Checking...';
+        }
+    }
+
     window.checkApiConnection = async function checkApiConnection() {
         var cfg = readApiConfigFromDom();
-        var mode = cfg.mode;
         var uid = cfg.uid;
         var key = cfg.key;
 
-        if (mode === 'C' && !uid) {
-            setApiStatus((typeof T === 'function') ? T('missing_user_id') : 'Missing user id', 'error');
-            return false;
-        }
-        if (mode === 'C' && !key) {
-            setApiStatus((typeof T === 'function') ? T('missing_api_key') : 'Missing api key', 'error');
-            return false;
-        }
-
-        var headers = { 'Zotero-API-Version': 3 };
-        if (mode === 'C' && key) headers['Zotero-API-Key'] = key;
-        if (mode === 'L') uid = '0';
-
-        var doFetch = mode === 'L' ? localFetch : function (url, opts) { return fetch(url, opts); };
-        var url = API[mode] + '/' + encodeURIComponent(uid) + '/collections?limit=1';
-
-        setApiStatus((typeof T === 'function') ? T('checking_connection') : 'Checking...', '');
         if (apiCheckBtn) apiCheckBtn.disabled = true;
+        setApiStatus((typeof T === 'function') ? T('checking_connection') : 'Checking...', '');
+
+        // 1. Check Local
+        setStatusLight('local', 'checking');
+        var localOk = false;
         try {
-            var res = await doFetch(url, { headers: headers });
-            if (res && res.ok) {
-                setApiStatus((typeof T === 'function') ? T('connection_success') : 'OK', 'success');
-                return true;
-            }
-            var status = res && typeof res.status === 'number' ? res.status : 0;
-            if (status === 401 || status === 403) {
-                setApiStatus((typeof T === 'function') ? T('auth_failed') : 'Auth failed', 'error');
-                return false;
-            }
-            setApiStatus((typeof T === 'function') ? T('connection_failed') : 'Connection failed', 'error');
-            return false;
+            var localRes = await localFetch('http://localhost:23119/api/users/0/collections?limit=1');
+            localOk = !!(localRes && localRes.ok);
+            if (localOk) lastLocalFailureTime = 0; // Reset cooling period on success
+            setStatusLight('local', localOk ? 'connected' : 'error');
         } catch (e) {
-            setApiStatus((typeof T === 'function') ? T('connection_failed') : 'Connection failed', 'error');
-            return false;
-        } finally {
-            if (apiCheckBtn) apiCheckBtn.disabled = false;
+            setStatusLight('local', 'error');
         }
+
+        // 2. Check Cloud
+        setStatusLight('cloud', 'checking');
+        var cloudOk = false;
+        if (!uid || !key) {
+            setStatusLight('cloud', 'error');
+        } else {
+            try {
+                var cloudRes = await fetch('https://api.zotero.org/users/' + encodeURIComponent(uid) + '/collections?limit=1', {
+                    headers: { 'Zotero-API-Version': 3, 'Zotero-API-Key': key }
+                });
+                cloudOk = !!(cloudRes && cloudRes.ok);
+                setStatusLight('cloud', cloudOk ? 'connected' : 'error');
+            } catch (e) {
+                setStatusLight('cloud', 'error');
+            }
+        }
+
+        if (localOk || cloudOk) {
+            setApiStatus((typeof T === 'function') ? T('connection_success') : 'OK', 'success');
+        } else {
+            setApiStatus((typeof T === 'function') ? T('connection_failed') : 'Failed', 'error');
+        }
+        if (apiCheckBtn) apiCheckBtn.disabled = false;
     };
 
     // Initial state for new buttons (if present)
@@ -225,26 +241,96 @@ function upd() {
     });
 })();
 
-// Helper fetch for local mode
+// Helper fetch for local mode - queue-based strategy to avoid overwriting mnzotero://fetch trigger data
 function localFetch(url, options) {
     return new Promise(function (resolve, reject) {
         var id = 'req_' + Date.now() + '_' + Math.random().toString(36).slice(2);
-        window.__mnFetchCb = window.__mnFetchCb || {};
-        window.__mnFetchCb[id] = function (err, data) {
-            try { delete window.__mnFetchCb[id]; } catch (e) { }
-            if (err) reject(new Error(err));
-            else resolve({
-                ok: data && data.ok,
-                status: data && data.status,
-                json: function () { return Promise.resolve(data && data.body != null ? data.body : {}); }
-            });
+        var request = {
+            id: id,
+            url: url,
+            options: options || {},
+            resolve: resolve,
+            reject: reject
         };
-        window.__mnFetchPending = JSON.stringify({ id: id, url: url, options: options || {} });
-        var iframe = document.createElement('iframe');
-        iframe.style.display = 'none';
-        iframe.src = 'mnzotero://fetch';
-        document.body.appendChild(iframe);
-        setTimeout(function () { try { iframe.remove(); } catch (e) { } }, 500);
+        __mnFetchQueue.push(request);
+        processFetchQueue();
+    });
+}
+
+function processFetchQueue() {
+    if (__mnFetchBusy || __mnFetchQueue.length === 0) return;
+    __mnFetchBusy = true;
+    
+    var req = __mnFetchQueue[0];
+    var id = req.id;
+    
+    window.__mnFetchCb = window.__mnFetchCb || {};
+    window.__mnFetchCb[id] = function (err, data) {
+        try { delete window.__mnFetchCb[id]; } catch (e) { }
+        
+        __mnFetchBusy = false;
+        __mnFetchQueue.shift(); 
+        
+        if (err) req.reject(new Error(err));
+        else req.resolve({
+            ok: data && data.ok,
+            status: data && data.status,
+            json: function () { return Promise.resolve(data && data.body != null ? data.body : {}); }
+        });
+        
+        processFetchQueue();
+    };
+
+    window.__mnFetchPending = JSON.stringify({ id: id, url: req.url, options: req.options });
+    var iframe = document.createElement('iframe');
+    iframe.style.display = 'none';
+    iframe.src = 'mnzotero://fetch';
+    document.body.appendChild(iframe);
+    setTimeout(function () { try { iframe.remove(); } catch (e) { } }, 500);
+}
+
+/**
+ * Smart Fetch: Try Local first, fallback to Cloud
+ */
+async function smartFetch(path, options) {
+    var opts = options || {};
+    var cfg = window.__mnConfig || {};
+    var uid = cfg.uid || '0';
+    var key = cfg.key || '';
+
+    // 1. Try Local API (using user 0)
+    // Circuit breaker: skip if failed in the last 10 seconds
+    if (Date.now() - lastLocalFailureTime > 10000) {
+        var localPath = path.replace(new RegExp('/users/' + uid), '/users/0');
+        var localUrl = 'http://localhost:23119/api' + localPath;
+        console.log('[Network] Try Local: ' + localPath);
+        try {
+            var res = await localFetch(localUrl, opts);
+            if (res.ok) {
+                console.log('[Network] Success (Local): ' + localPath);
+                return res;
+            } else {
+                console.log('[Network] Failed (Local): ' + localPath + ' (Status: ' + res.status + ')');
+            }
+        } catch (e) {
+            console.log('[Network] Error (Local): ' + localPath + '. Message: ' + e.message);
+            lastLocalFailureTime = Date.now();
+        }
+    } else {
+        console.log('[Network] Circuit Breaker Active. Skip Local: ' + path);
+    }
+
+    // 2. Try Cloud API
+    var cloudUrl = 'https://api.zotero.org' + path;
+    var headers = Object.assign({}, opts.headers || {}, {
+        'Zotero-API-Version': 3
+    });
+    if (key) headers['Zotero-API-Key'] = key;
+    
+    console.log('[Network] Fallback/Direct Cloud: ' + path);
+    return fetch(cloudUrl, Object.assign({}, opts, { headers: headers })).then(function(res) {
+        console.log('[Network] Result (Cloud): ' + path + ' (Status: ' + res.status + ')');
+        return res;
     });
 }
 

@@ -15,7 +15,8 @@ var Si18n = (function () {
     "user_id": "用户ID",
     "username": "用户名",
     "api_key": "API Key",
-    "local_api_limit_notice": "使用Local API前，请在Zotero中开启“允许此计算机上的其他应用程序与Zotero通讯”。",
+    "local_api_limit_notice": "[仅MacOS]需在Zotero中开启“允许此计算机上的其他应用程序与Zotero通讯”。",
+    "local_api_hint": "[仅MacOS]需在Zotero中开启“允许此计算机上的其他应用程序与Zotero通讯”。",
     "library": "文献库",
     "selected_cards": "选中文献卡片",
     "search_placeholder": "关键词（标题、作者、年份）...",
@@ -90,7 +91,11 @@ var Si18n = (function () {
     "reopen_onboarding": "查看新手引导",
     "settings_nav_api": "API配置",
     "settings_nav_templates": "字段模板",
-    "settings_nav_onboarding": "新手引导"
+    "settings_nav_onboarding": "新手引导",
+    "local_status": "本地状态",
+    "cloud_status": "云端状态",
+    "connected": "已连接",
+    "disconnected": "未连接"
   };
 
   // 翻译数据（英文）
@@ -103,7 +108,8 @@ var Si18n = (function () {
     "user_id": "User ID",
     "username": "Username",
     "api_key": "API Key",
-    "local_api_limit_notice": "Before using Local API, enable \"Allow other applications on this computer to communicate with Zotero\" in Zotero.",
+    "local_api_limit_notice": "Enable \"Allow other applications on this computer to communicate with Zotero\" in Zotero settings.",
+    "local_api_hint": "Enable \"Allow other applications on this computer to communicate with Zotero\" in Zotero settings.",
     "library": "Library",
     "selected_cards": "Selected Cards",
     "search_placeholder": "Keywords (Title, Author, Year)...",
@@ -178,7 +184,11 @@ var Si18n = (function () {
     "reopen_onboarding": "View Beginner Guide",
     "settings_nav_api": "API",
     "settings_nav_templates": "Templates",
-    "settings_nav_onboarding": "Onboarding"
+    "settings_nav_onboarding": "Onboarding",
+    "local_status": "Local Status",
+    "cloud_status": "Cloud Status",
+    "connected": "Connected",
+    "disconnected": "Disconnected"
   };
 
   // 当前使用的翻译数据 - 默认使用中文
@@ -221,7 +231,7 @@ var Si18n = (function () {
       translations = languageMap[language];
       return;
     }
-    
+
     // 尝试前缀匹配
     var prefix = language.split('-')[0].split('_')[0];
     for (var key in languageMap) {
@@ -250,7 +260,7 @@ var Si18n = (function () {
     if (!translations || !translations[key]) {
       return key;
     }
-    
+
     var text = translations[key];
     if (params) {
       for (var paramKey in params) {
@@ -267,7 +277,7 @@ var Si18n = (function () {
     init: init,
     t: t,
     T: t,
-    getLanguage: function() {
+    getLanguage: function () {
       return (translations === enTranslations) ? 'en' : 'zh_CN';
     }
   };

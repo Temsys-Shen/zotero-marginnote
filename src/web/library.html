@@ -339,22 +339,14 @@
 
         async function loadFilters() {
             var cfg = window.__mnConfig || {};
-            var mode = $('mode') ? $('mode').value : (cfg.mode || 'L');
-            if (!API[mode]) mode = 'L';
-            var uid = ($('uid') && $('uid').value) || cfg.uid || '';
-            var key = ($('key') && $('key').value) || cfg.key || '';
-            if (mode === 'L') uid = '0';
-            if (mode === 'C' && !uid) return;
-            var headers = { 'Zotero-API-Version': 3 };
-            if (mode === 'C' && key) headers['Zotero-API-Key'] = key;
-            var base = API[mode] + '/' + uid;
-            var doFetch = mode === 'L' ? localFetch : function (url, opts) { return fetch(url, opts); };
+            var uid = cfg.uid || '0';
+            var base = '/users/' + uid;
             
             var colContainer = $('collections-tree');
             if (colContainer) colContainer.innerHTML = '';
             
             try {
-                var colRes = await doFetch(base + '/collections?limit=1000', { headers: headers });
+                var colRes = await smartFetch(base + '/collections?limit=1000');
                 if (colRes.ok) {
                     var colls = await colRes.json();
                     if (Array.isArray(colls) && colContainer) {
@@ -362,9 +354,9 @@
                         renderCollectionsTree(colls, colContainer);
                     }
                 }
-            } catch (e) { }
+            } catch (e) { console.error('Load collections failed', e); }
             try {
-                var tagRes = await doFetch(base + '/tags?limit=1000', { headers: headers });
+                var tagRes = await smartFetch(base + '/tags?limit=1000');
                 if (tagRes.ok) {
                     var tags = await tagRes.json();
                     if (Array.isArray(tags)) {
@@ -372,7 +364,7 @@
                         renderTagsList(window.MNAvailableTagsSet, $('tag-filter-input') ? $('tag-filter-input').value : '');
                     }
                 }
-            } catch (e) { }
+            } catch (e) { console.error('Load tags failed', e); }
         }
 
         window.__onPanelShow = function() {
@@ -664,173 +656,101 @@
 
         async function run() {
             const q = $('q').value.trim();
-            
-            // 从注入的配置或 DOM 中读取配置
             var cfg = window.__mnConfig || {};
-            let mode = $('mode') ? $('mode').value : (cfg.mode || 'L');
-            let uid = $('uid') ? $('uid').value : (cfg.uid || '');
-            let slug = $('slug') ? $('slug').value : (cfg.slug || '');
-            let key = $('key') ? $('key').value : (cfg.key || '');
+            let uid = cfg.uid || '0';
+            let key = cfg.key || '';
+            let slug = cfg.slug || '';
             
-            if (mode === 'L') uid = '0';
-
             const ui = { btn: $('btn'), log: $('log'), out: $('out') };
-
             ui.btn.disabled = true;
             ui.out.innerHTML = '';
             ui.log.style.display = 'block';
             ui.log.innerText = (typeof T === 'function' ? T('searching') : 'Searching...');
             
-            // USER REQUEST: 右侧正处于加载状态时，tag区域不可点击，要整体蒙灰并禁止点击
             if ($('tags-loading-mask')) $('tags-loading-mask').classList.remove('hidden');
-
-            var headers = { 'Zotero-API-Version': 3 };
-            if (mode === 'C' && key) headers['Zotero-API-Key'] = key;
-            const base = `${API[mode]}/${uid}`;
-            var doFetch = mode === 'L' ? localFetch : function (url, opts) { return fetch(url, opts); };
 
             var collectionKey = window.MNCurrentCollection || '';
             var selectedTags = window.MNSelectedTags || [];
+            var base = '/users/' + uid;
             var path = collectionKey ? base + '/collections/' + collectionKey + '/items' : base + '/items';
             var params = ['limit=100'];
             if (q) params.push('q=' + encodeURIComponent(q));
-            
-            // USER REQUEST: 排除annotation
-            // Note: Zotero API doesn't strictly support negative itemType in all versions, 
-            // but we filter it in JS below. If we wanted to try and reduce payload:
-            // params.push('itemType=-annotation'); 
-
             for (var ti = 0; ti < selectedTags.length; ti++) { params.push('tag=' + encodeURIComponent(selectedTags[ti])); }
-            var queryString = params.length ? ('?' + params.join('&')) : '';
-            var url = path + queryString;
+            var url = path + (params.length ? ('?' + params.join('&')) : '');
 
             try {
-                var r1 = await doFetch(url, { headers: headers });
+                var r1 = await smartFetch(url);
                 if (!r1.ok) throw new Error((typeof T === 'function' ? T('connection_failed') : 'Connection failed'));
 
                 const rawJson = await r1.json();
-                
-                // USER REQUEST: 排除 annotation
                 const items = rawJson.filter(i => i.data && !['attachment', 'note', 'annotation'].includes(i.data.itemType));
 
                 var extractedTags = new Set();
                 items.forEach(function(item) {
                     if (item.data && Array.isArray(item.data.tags)) {
-                        item.data.tags.forEach(function(t) {
-                            if (t.tag) extractedTags.add(t.tag);
-                        });
+                        item.data.tags.forEach(function(t) { if (t.tag) extractedTags.add(t.tag); });
                     }
                 });
-                
                 window.MNAvailableTagsSet = extractedTags;
                 var currentSearchTerm = $('tag-filter-input') ? $('tag-filter-input').value : '';
-                
-                // USER REQUEST: 如果当前没选择标签，且collection是all的话，显示全部标签，一个都不要隐藏
-                // 也要考虑搜索词 q。如果 q 为空才显示全部。
-                if (!collectionKey && !selectedTags.length && !q) {
-                    renderTagsList(null, currentSearchTerm);
-                } else {
-                    renderTagsList(extractedTags, currentSearchTerm);
-                }
+                if (!collectionKey && !selectedTags.length && !q) renderTagsList(null, currentSearchTerm);
+                else renderTagsList(extractedTags, currentSearchTerm);
 
                 if (!items.length) { ui.log.innerText = (typeof T === 'function' ? T('no_matches_found') : 'No matches found'); return; }
                 ui.log.innerText = `Fetching attachments for ${items.length} items...`;
 
-                var cards;
-                // --- Local mode (sequential, native bridge fetch) ---
-                if (mode === 'L') {
-                    cards = [];
-                    var localEyePayload = {}; // collect {attachmentKey: filename} for batch check
-                    for (var i = 0; i < items.length; i++) {
-                        var d = items[i].data;
-                        var pdf = null;
-                        var pdfFilename = null;
-                        try {
-                            var r2 = await doFetch(base + '/items/' + d.key + '/children', { headers: headers });
-                            if (r2.ok) {
-                                var kids = await r2.json();
-                                var p = kids.find(function (k) { return k.data.itemType === 'attachment' && (k.data.contentType === 'application/pdf' || (k.data.filename || '').endsWith('.pdf')); });
-                                if (p) { pdf = p.data.key; pdfFilename = p.data.filename || null; }
-                            }
-                        } catch (e) { }
-                        var lItem = 'zotero://select/library/items/' + d.key;
-                        var btns = '<a href="' + lItem + '" class="pill pill-zotero">' + T('open_in_zotero') + '</a>';
-                        if (pdf) {
-                            var lPdf = 'zotero://open-pdf/library/items/' + pdf;
-                            btns += '<a href="' + lPdf + '" class="pill pill-pdf">' + T('local_pdf') + '</a>';
+                var processedItems = await Promise.all(items.map(async function (item) {
+                    var d = item.data;
+                    var pdf = null;
+                    var pdfFilename = null;
+                    try {
+                        var r_kids = await smartFetch(base + '/items/' + d.key + '/children');
+                        if (r_kids.ok) {
+                            var kids = await r_kids.json();
+                            var p = kids.find(function (k) { return k.data.itemType === 'attachment' && (k.data.contentType === 'application/pdf' || (k.data.filename || '').endsWith('.pdf')); });
+                            if (p) { pdf = p.data.key; pdfFilename = p.data.filename || null; }
                         }
-                        var addTitle = (d.title || T('Untitled')).replace(/"/g, '"');
-                        var year = (d.date || '').substring(0, 4) || '';
-                        var author = (d.creators && d.creators[0] && (d.creators[0].lastName || d.creators[0].name)) || T('unknown');
-                        var fieldTemplates = getFieldTemplates();
-                        var createNoteUrl = buildCreateNoteUrl(d.title || T('Untitled'), d.itemType, year, author, lItem, pdf ? ('zotero://open-pdf/library/items/' + pdf) : '', '', '', d.key, mode, uid, key, d, fieldTemplates);
-                        
-                        var actionButtons = '';
-                        if (pdf) {
-                            var safeKey = String(key || '').replace(/"/g, '"');
-                            actionButtons += '<a href="#" class="add-to-mn-btn download-pdf-btn" title="' + T('download_pdf') + '" data-uid="' + uid + '" data-attachment-key="' + pdf + '" data-file-name="' + (pdfFilename || addTitle) + '" data-api-key="' + safeKey + '">' + buildDownloadPdfIcon() + '</a>';
-                            actionButtons += '<button class="open-in-mn-btn loading" data-attachment-key="' + pdf + '" title="Open in MarginNote"></button>';
-                            if (pdfFilename) localEyePayload[pdf] = pdfFilename;
-                        }
-                        actionButtons += '<a href="' + createNoteUrl + '" class="add-to-mn-btn" title="' + T('add_to_mn') + '">+</a>';
-                        
-                        cards.push('<div class="list-item"><div class="list-item-body"><div class="list-title">' + addTitle + '</div><div class="meta-row"><span>' + author + '</span><span>' + (d.date || '') + '</span><span class="item-type-tag">' + d.itemType + '</span></div><div class="action-row">' + btns + '</div></div><div class="list-item-actions">' + actionButtons + '</div></div>');
-                    }
-                    // Dispatch batch check to native (same as Cloud mode)
-                    if (Object.keys(localEyePayload).length > 0) {
-                        sendMNProtocol('mnzotero://checkDocuments?payload=' + encodeURIComponent(JSON.stringify(localEyePayload)));
-                    }
-                } else {
-                    // --- Cloud mode (parallel WebView fetch) ---
-                    var cloudItems = await Promise.all(items.map(async function (item) {
-                        var d = item.data;
-                        var pdf = null;
-                        var pdfFilename = null;
-                        try {
-                            var r1_kids = await doFetch(base + '/items/' + d.key + '/children', { headers: headers });
-                            if (r1_kids.ok) {
-                                var kids = await r1_kids.json();
-                                var p = kids.find(function (k) { return k.data.itemType === 'attachment' && (k.data.contentType === 'application/pdf' || (k.data.filename || '').endsWith('.pdf')); });
-                                if (p) { pdf = p.data.key; pdfFilename = p.data.filename || null; }
-                            }
-                        } catch (e) { }
-                        return { d: d, pdf: pdf, pdfFilename: pdfFilename };
-                    }));
+                    } catch (e) { }
+                    return { d: d, pdf: pdf, pdfFilename: pdfFilename };
+                }));
 
-                    // Build cards and collect {attachmentKey -> filename} for batch eye check
-                    var cloudEyePayload = {};
-                    cards = cloudItems.map(function(ci) {
-                        var d = ci.d, pdf = ci.pdf;
-                        var u = (typeof slug !== 'undefined' && slug) ? slug : 'user';
-                        var lItem = 'zotero://select/library/items/' + d.key;
-                        var cItem = 'https://www.zotero.org/' + u + '/items/' + d.key;
-                        var btns = '<a href="' + lItem + '" class="pill pill-zotero">' + T('open_in_zotero') + '</a><a href="' + cItem + '" target="_blank" class="pill pill-web">' + T('web') + '</a>';
-                        var lPdf = '', cPdf = '';
-                        if (pdf) {
-                            lPdf = 'zotero://open-pdf/library/items/' + pdf;
-                            cPdf = 'https://www.zotero.org/' + u + '/items/' + d.key + '/attachment/' + pdf + '/reader';
-                            btns += '<a href="' + lPdf + '" class="pill pill-pdf">' + T('local_pdf') + '</a><a href="' + cPdf + '" target="_blank" class="pill pill-web">' + T('cloud_pdf') + '</a>';
-                        }
-                        var addTitle = (d.title || T('Untitled')).replace(/"/g, '"');
-                        var year = (d.date || '').substring(0, 4) || '';
-                        var author = (d.creators && d.creators[0] && (d.creators[0].lastName || d.creators[0].name)) || T('unknown');
-                        var fieldTemplates = getFieldTemplates();
-                        var createNoteUrl = buildCreateNoteUrl(d.title || T('Untitled'), d.itemType, year, author, lItem, pdf ? lPdf : '', cItem, pdf ? cPdf : '', d.key, mode, uid, key, d, fieldTemplates);
-                        var actionButtons = '';
-                        if (pdf) {
-                            var safeKey = String(key || '').replace(/"/g, '"');
-                            actionButtons += '<a href="#" class="add-to-mn-btn download-pdf-btn" title="' + T('download_pdf') + '" data-uid="' + uid + '" data-attachment-key="' + pdf + '" data-file-name="' + (ci.pdfFilename || addTitle) + '" data-api-key="' + safeKey + '">' + buildDownloadPdfIcon() + '</a>';
-                            actionButtons += '<button class="open-in-mn-btn loading" data-attachment-key="' + pdf + '" title="Open in MarginNote"></button>';
-                            if (ci.pdfFilename) cloudEyePayload[pdf] = ci.pdfFilename;
-                        }
-                        actionButtons += '<a href="' + createNoteUrl + '" class="add-to-mn-btn" title="' + T('add_to_mn') + '">+</a>';
-                        return '<div class="list-item"><div class="list-item-body"><div class="list-title">' + addTitle + '</div><div class="meta-row"><span>' + author + '</span><span>' + (d.date || '') + '</span><span class="item-type-tag">' + d.itemType + '</span></div><div class="action-row">' + btns + '</div></div><div class="list-item-actions">' + actionButtons + '</div></div>';
-                    });
-
-                    if (Object.keys(cloudEyePayload).length > 0) {
-                        var payloadStr = JSON.stringify(cloudEyePayload);
-                        sendMNProtocol('mnzotero://checkDocuments?payload=' + encodeURIComponent(payloadStr));
+                var eyePayload = {};
+                var cards = processedItems.map(function(ci) {
+                    var d = ci.d, pdf = ci.pdf;
+                    var u = (typeof slug !== 'undefined' && slug) ? slug : 'user';
+                    var lItem = 'zotero://select/library/items/' + d.key;
+                    var cItem = 'https://www.zotero.org/' + u + '/items/' + d.key;
+                    
+                    var btns = '<a href="' + lItem + '" class="pill pill-zotero">' + T('open_in_zotero') + '</a>';
+                    btns += '<a href="' + cItem + '" target="_blank" class="pill pill-web">' + T('web') + '</a>';
+                    
+                    var lPdf = '', cPdf = '';
+                    if (pdf) {
+                        lPdf = 'zotero://open-pdf/library/items/' + pdf;
+                        cPdf = 'https://www.zotero.org/' + u + '/items/' + d.key + '/attachment/' + pdf + '/reader';
+                        btns += '<a href="' + lPdf + '" class="pill pill-pdf">' + T('local_pdf') + '</a>';
+                        btns += '<a href="' + cPdf + '" target="_blank" class="pill pill-web">' + T('cloud_pdf') + '</a>';
                     }
+                    
+                    var addTitle = (d.title || T('Untitled')).replace(/"/g, '"');
+                    var author = (d.creators && d.creators[0] && (d.creators[0].lastName || d.creators[0].name)) || T('unknown');
+                    var fieldTemplates = getFieldTemplates();
+                    var createNoteUrl = buildCreateNoteUrl((d.title || T('Untitled')), d.itemType, (d.date || '').substring(0, 4), author, lItem, pdf ? lPdf : '', cItem, pdf ? cPdf : '', d.key, 'C', uid, key, d, fieldTemplates);
+                    
+                    var actionButtons = '';
+                    if (pdf) {
+                        var safeKey = String(key || '').replace(/"/g, '"');
+                        actionButtons += '<a href="#" class="add-to-mn-btn download-pdf-btn" title="' + T('download_pdf') + '" data-uid="' + uid + '" data-attachment-key="' + pdf + '" data-file-name="' + (ci.pdfFilename || addTitle) + '" data-api-key="' + safeKey + '">' + buildDownloadPdfIcon() + '</a>';
+                        actionButtons += '<button class="open-in-mn-btn loading" data-attachment-key="' + pdf + '" title="Open in MarginNote"></button>';
+                        if (ci.pdfFilename) eyePayload[pdf] = ci.pdfFilename;
+                    }
+                    actionButtons += '<a href="' + createNoteUrl + '" class="add-to-mn-btn" title="' + T('add_to_mn') + '">+</a>';
+                    
+                    return '<div class="list-item"><div class="list-item-body"><div class="list-title">' + addTitle + '</div><div class="meta-row"><span>' + author + '</span><span>' + (d.date || '') + '</span><span class="item-type-tag">' + d.itemType + '</span></div><div class="action-row">' + btns + '</div></div><div class="list-item-actions">' + actionButtons + '</div></div>';
+                });
+
+                if (Object.keys(eyePayload).length > 0) {
+                    sendMNProtocol('mnzotero://checkDocuments?payload=' + encodeURIComponent(JSON.stringify(eyePayload)));
                 }
 
                 ui.out.innerHTML = '<div class="list-container">' + cards.join('') + '</div>';
@@ -839,7 +759,6 @@
             } catch (e) { ui.log.innerText = 'Error: ' + e.message; }
             finally { 
                 ui.btn.disabled = false; 
-                // USER REQUEST: 右侧加载完成，隐藏蒙层
                 if ($('tags-loading-mask')) $('tags-loading-mask').classList.add('hidden');
             }
         }

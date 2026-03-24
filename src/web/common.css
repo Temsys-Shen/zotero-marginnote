@@ -330,6 +330,114 @@ select:focus {
 .api-action-status.error {
     color: #ff3b30;
 }
+/* Status indicators */
+.status-lights {
+    display: flex;
+    gap: 16px;
+    margin: 8px 2px 14px;
+}
+
+.status-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    color: var(--sub);
+}
+
+/* Tooltip styles */
+.tooltip-container {
+    position: relative;
+    cursor: help;
+}
+
+.tooltip-text {
+    visibility: hidden;
+    width: 220px;
+    background-color: var(--surface);
+    color: var(--text);
+    text-align: left;
+    border-radius: 6px;
+    padding: 8px 12px;
+    position: absolute;
+    z-index: 1000;
+    top: 50%;
+    left: 105%;
+    opacity: 0;
+    transition: opacity 0.2s, transform 0.2s;
+    transform: translateY(-50%) translateX(10px);
+    font-size: 11px;
+    line-height: 1.5;
+    border: 1px solid var(--border);
+    box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+    pointer-events: none;
+    white-space: normal;
+}
+
+.tooltip-container:hover .tooltip-text,
+.tooltip-container:active .tooltip-text {
+    visibility: visible;
+    opacity: 1;
+    transform: translateY(-50%) translateX(0);
+}
+
+#settings-local-status-label {
+    text-decoration: underline dotted;
+    text-decoration-color: #888;
+    text-underline-offset: 3px;
+}
+
+/* Arrow (point left) */
+.tooltip-text::after {
+    content: "";
+    position: absolute;
+    top: 50%;
+    right: 100%;
+    margin-top: -6px;
+    border-width: 6px;
+    border-style: solid;
+    border-color: transparent var(--surface) transparent transparent;
+}
+
+.tooltip-text::before {
+    content: "";
+    position: absolute;
+    top: 50%;
+    right: 100%;
+    margin-top: -7px;
+    border-width: 7px;
+    border-style: solid;
+    border-color: transparent var(--border) transparent transparent;
+}
+
+.status-light {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background-color: #ccc;
+    display: inline-block;
+    transition: background-color 0.3s ease, box-shadow 0.3s ease;
+}
+
+.status-light.connected {
+    background-color: var(--green);
+    box-shadow: 0 0 5px var(--green);
+}
+
+.status-light.error {
+    background-color: #ff3b30;
+    box-shadow: 0 0 5px #ff3b30;
+}
+
+.status-light.checking {
+    background-color: var(--accent);
+    animation: mn-pulse 1s infinite alternate;
+}
+
+@keyframes mn-pulse {
+    from { opacity: 0.5; }
+    to { opacity: 1; }
+}
 
 .mode-option {
     flex: 1;

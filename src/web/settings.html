@@ -30,17 +30,26 @@
             <div class="settings-content">
                 <section id="settings-section-api" class="settings-section">
                     <h2 class="settings-section-title" id="settings-title-api">API</h2>
-                    <input type="hidden" id="mode" value="L">
-                    <div class="mode-options">
-                        <span class="mode-option active" data-value="L" role="button">Local API</span>
-                        <span class="mode-option" data-value="C" role="button">Cloud API</span>
+                    <input type="hidden" id="mode" value="C">
+                    
+                    <div class="status-lights">
+                        <div class="status-item tooltip-container" id="local-status-container">
+                            <span class="status-light" id="local-light"></span>
+                            <span id="settings-local-status-label">Local Status</span>:
+                            <span id="local-status-text">--</span>
+                            <span class="tooltip-text" id="local-api-tooltip">Hint...</span>
+                        </div>
+                        <div class="status-item">
+                            <span class="status-light" id="cloud-light"></span>
+                            <span id="settings-cloud-status-label">Cloud Status</span>:
+                            <span id="cloud-status-text">--</span>
+                        </div>
                     </div>
-                    <p id="api-mode-notice" class="api-mode-notice" style="display:none">使用Local API前，请在Zotero中开启“允许此计算机上的其他应用程序与Zotero通讯”。</p>
-                    <input id="uid" placeholder="UserID" style="display:none">
-                    <input id="slug" placeholder="Username" style="display:none">
+                    <input id="uid" placeholder="UserID">
+                    <input id="slug" placeholder="Username">
                     <div class="password-container">
-                        <input id="key" type="password" placeholder="API Key" style="display:none">
-                        <span class="toggle-password" onclick="togglePasswordVisibility()" style="display:none"></span>
+                        <input id="key" type="password" placeholder="API Key">
+                        <span class="toggle-password" onclick="togglePasswordVisibility()"></span>
                     </div>
 
                     <div class="api-actions">
@@ -130,6 +139,17 @@
                 if (target === 'settings-section-templates') item.textContent = T('settings_nav_templates');
                 if (target === 'settings-section-onboarding') item.textContent = T('settings_nav_onboarding');
             });
+
+            var localStatusLabel = document.getElementById('settings-local-status-label');
+            var cloudStatusLabel = document.getElementById('settings-cloud-status-label');
+            if (localStatusLabel) {
+                localStatusLabel.textContent = T('local_status');
+            }
+            if (cloudStatusLabel) cloudStatusLabel.textContent = T('cloud_status');
+
+            // Set custom CSS tooltip text
+            var localTooltip = document.getElementById('local-api-tooltip');
+            if (localTooltip) localTooltip.textContent = T('local_api_hint');
 
             var titleApi = document.getElementById('settings-title-api');
             if (titleApi) titleApi.textContent = T('settings_nav_api');
