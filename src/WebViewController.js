@@ -381,6 +381,24 @@ var SZZoteroBridge = class {
       return false;
     }
 
+    if (host === 'checkDocument' || path.indexOf('checkDocument') !== -1) {
+      const queryString = SZZoteroBridge._getQueryString(url, urlString);
+      SZZoteroBridge._handleCheckDocument(self, queryString);
+      return false;
+    }
+
+    if (host === 'checkDocuments' || path.indexOf('checkDocuments') !== -1) {
+      const queryString = SZZoteroBridge._getQueryString(url, urlString);
+      SZZoteroBridge._handleCheckDocuments(self, queryString);
+      return false;
+    }
+
+    if (host === 'openDocument' || path.indexOf('openDocument') !== -1) {
+      const queryString = SZZoteroBridge._getQueryString(url, urlString);
+      SZZoteroBridge._handleOpenDocument(self, queryString);
+      return false;
+    }
+
     return true;
   }
 
@@ -810,6 +828,122 @@ var SZZoteroBridge = class {
     const escId = String(requestId).replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/\r/g, '').replace(/\n/g, '\\n');
     const escError = String(errorMsg || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/\r/g, '').replace(/\n/g, '\\n');
     webView.evaluateJavaScript('(function(){ if (window.onMNDownloadResult) window.onMNDownloadResult(\'' + escId + '\', ' + (ok ? 'true' : 'false') + ', \'' + escError + '\'); })();', null);
+  }
+
+  static _handleCheckDocument(self, queryString) {
+    const params = SZZoteroBridge._parseQueryString(queryString);
+    const attachmentKey = params.attachmentKey ? String(params.attachmentKey) : '';
+    if (!attachmentKey) return;
+
+    // Use Local API to get filename (sequential native fetch)
+    const url = 'http://localhost:23119/api/users/0/items/' + encodeURIComponent(attachmentKey);
+    const headers = { 'Zotero-API-Version': '3' };
+
+    SZMNNetwork.fetch(url, { method: 'GET', headers: headers }).then((res) => {
+      const data = res.json();
+      const filename = (data && data.filename) ? String(data.filename) : '';
+      if (!filename) {
+        self.webView.evaluateJavaScript('window.onMNDocumentCheck(\'' + attachmentKey + '\', null)', null);
+        return;
+      }
+
+      const docMd5 = SZZoteroBridge._findDocMd5ByFilename(filename);
+      self.webView.evaluateJavaScript('window.onMNDocumentCheck(\'' + attachmentKey + '\', ' + (docMd5 ? ('\'' + docMd5 + '\'') : 'null') + ')', null);
+    }, (err) => {
+      self.webView.evaluateJavaScript('window.onMNDocumentCheck(\'' + attachmentKey + '\', null)', null);
+    });
+  }
+
+  static _handleCheckDocuments(self, queryString) {
+    const params = SZZoteroBridge._parseQueryString(queryString);
+    const payloadStr = params.payload ? String(params.payload) : '';
+    if (!payloadStr) return;
+
+    try {
+      const payload = JSON.parse(payloadStr); // { attachmentKey: filename }
+      const results = SZZoteroBridge._findDocMd5sByFilenames(payload);
+      const resultsJson = JSON.stringify(results);
+      self.webView.evaluateJavaScript('window.onMNDocumentCheckBatch(' + resultsJson + ')', null);
+    } catch (e) {
+      console.log('checkDocuments failed: ' + e);
+    }
+  }
+
+  static _handleOpenDocument(self, queryString) {
+    const params = SZZoteroBridge._parseQueryString(queryString);
+    const docMd5 = params.docMd5 ? String(params.docMd5) : '';
+    if (!docMd5) return;
+
+    try {
+      const resolved = SZZoteroBridge._resolveCurrentNotebookId(self);
+      const { studyController, notebookId } = resolved;
+      if (studyController) {
+        studyController.openNotebookAndDocument(notebookId, docMd5);
+      }
+    } catch (e) {
+      console.log('openDocument failed: ' + e);
+    }
+  }
+
+  static _findDocMd5ByFilename(filename) {
+    if (!filename) return null;
+    const db = Database.sharedInstance();
+    const docs = db.allDocuments();
+    const count = SZZoteroBridge._getNSArrayCount(docs);
+    if (count === 0) return null;
+
+    for (let i = 0; i < count; i++) {
+      const doc = SZZoteroBridge._getNSArrayItem(docs, i);
+      if (!doc) continue;
+      const path = String(doc.pathFile || '');
+      if (path.indexOf(filename) !== -1) {
+        return String(doc.docMd5 || '');
+      }
+    }
+    return null;
+  }
+
+  static _findDocMd5sByFilenames(payload) {
+    // payload: { attachmentKey: filename }
+    const results = {};
+    const keys = Object.keys(payload);
+    if (keys.length === 0) return results;
+
+    // Initialize all results to null
+    keys.forEach(k => { results[k] = null; });
+
+    const db = Database.sharedInstance();
+    const docs = db.allDocuments();
+    const count = SZZoteroBridge._getNSArrayCount(docs);
+    if (count === 0) return results;
+
+    for (let i = 0; i < count; i++) {
+        const doc = SZZoteroBridge._getNSArrayItem(docs, i);
+        if (!doc) continue;
+        const path = String(doc.pathFile || '');
+        for (let j = 0; j < keys.length; j++) {
+            const attachmentKey = keys[j];
+            const fname = payload[attachmentKey];
+            if (fname && path.indexOf(fname) !== -1) {
+                results[attachmentKey] = String(doc.docMd5 || '');
+            }
+        }
+    }
+    return results;
+  }
+
+  static _getNSArrayCount(arr) {
+    if (!arr) return 0;
+    if (typeof arr.length === 'number') return arr.length;
+    if (typeof arr.count === 'function') return arr.count();
+    if (typeof arr.count === 'number') return arr.count;
+    return 0;
+  }
+
+  static _getNSArrayItem(arr, index) {
+    if (!arr) return null;
+    if (typeof arr.objectAtIndex === 'function') return arr.objectAtIndex(index);
+    return arr[index];
   }
 
   static _handleFocusNote(self, queryString) {

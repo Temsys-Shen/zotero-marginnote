@@ -614,6 +614,58 @@ select:focus {
     opacity: 0.7;
 }
 
+/* Eye button: open document in MN */
+.open-in-mn-btn {
+    flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    border-radius: 10px;
+    background: var(--accent-bg);
+    color: var(--accent);
+    font-size: 18px;
+    font-weight: 300;
+    line-height: 1;
+    text-decoration: none;
+    transition: opacity 0.2s;
+    cursor: pointer;
+    border: none;
+    padding: 0;
+}
+
+.open-in-mn-btn:hover {
+    opacity: 0.9;
+}
+
+.open-in-mn-btn:active {
+    opacity: 0.7;
+}
+
+.open-in-mn-btn.loading {
+    cursor: default;
+    pointer-events: none;
+    opacity: 0.5;
+}
+
+@keyframes mn-eye-spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+
+.open-in-mn-btn.loading::after {
+    content: '';
+    display: block;
+    width: 14px;
+    height: 14px;
+    border: 2px solid var(--accent);
+    border-top-color: transparent;
+    border-radius: 50%;
+    animation: mn-eye-spin 0.7s linear infinite;
+}
+
+
 .list-title {
     font-size: 16px;
     font-weight: 600;

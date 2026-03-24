@@ -626,6 +626,40 @@
             sendMNProtocol(protocolUrl);
         }, false);
 
+        // Native callbacks for Document Check
+        window.onMNDocumentCheck = function(attachmentKey, docMd5) {
+            var btn = document.querySelector('.open-in-mn-btn[data-attachment-key="' + attachmentKey + '"]');
+            if (!btn) return;
+            btn.classList.remove('loading');
+            if (docMd5) {
+                // Success
+                var innerSVG = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>';
+                btn.innerHTML = innerSVG;
+                btn.dataset.docMd5 = docMd5;
+            } else {
+                // Failure / No Match -> hide button
+                btn.style.display = 'none';
+            }
+        };
+
+        window.onMNDocumentCheckBatch = function(results) {
+            // results is a map of attachmentKey -> docMd5 (or null)
+            Object.keys(results).forEach(function(key) {
+                window.onMNDocumentCheck(key, results[key]);
+            });
+        };
+
+        // Click handler for eye button to open document
+        document.body.addEventListener('click', function (event) {
+            var btn = event.target.closest('.open-in-mn-btn');
+            if (!btn || btn.classList.contains('loading')) return;
+            event.preventDefault();
+            var docMd5 = btn.dataset.docMd5;
+            if (docMd5) {
+                sendMNProtocol('mnzotero://openDocument?docMd5=' + encodeURIComponent(docMd5));
+            }
+        });
+
         async function run() {
             const q = $('q').value.trim();
             
@@ -701,8 +735,10 @@
                 ui.log.innerText = `Fetching attachments for ${items.length} items...`;
 
                 var cards;
+                // --- Local mode (sequential, native bridge fetch) ---
                 if (mode === 'L') {
                     cards = [];
+                    var localPdfKeys = []; // collect {attachmentKey} for eye check
                     for (var i = 0; i < items.length; i++) {
                         var d = items[i].data;
                         var pdf = null;
@@ -725,27 +761,44 @@
                         var author = (d.creators && d.creators[0] && (d.creators[0].lastName || d.creators[0].name)) || T('unknown');
                         var fieldTemplates = getFieldTemplates();
                         var createNoteUrl = buildCreateNoteUrl(d.title || T('Untitled'), d.itemType, year, author, lItem, pdf ? ('zotero://open-pdf/library/items/' + pdf) : '', '', '', d.key, mode, uid, key, d, fieldTemplates);
-                        cards.push('<div class="list-item"><div class="list-item-body"><div class="list-title">' + addTitle + '</div><div class="meta-row"><span>' + author + '</span><span>' + (d.date || '') + '</span><span class="item-type-tag">' + d.itemType + '</span></div><div class="action-row">' + btns + '</div></div><a href="' + createNoteUrl + '" class="add-to-mn-btn" title="' + T('add_to_mn') + '">+</a></div>');
+                        // Eye button: only show loading placeholder if there is a PDF attachment; native will confirm
+                        var eyeHtml = pdf ? '<button class="open-in-mn-btn loading" data-attachment-key="' + pdf + '" title="Open in MarginNote"></button>' : '';
+                        cards.push('<div class="list-item"><div class="list-item-body"><div class="list-title">' + addTitle + '</div><div class="meta-row"><span>' + author + '</span><span>' + (d.date || '') + '</span><span class="item-type-tag">' + d.itemType + '</span></div><div class="action-row">' + btns + '</div></div><div class="list-item-actions">' + eyeHtml + '<a href="' + createNoteUrl + '" class="add-to-mn-btn" title="' + T('add_to_mn') + '">+</a></div></div>');
+                        if (pdf) localPdfKeys.push(pdf);
                     }
+                    // Dispatch checks to native (sequential, via bridge)
+                    localPdfKeys.forEach(function(attachmentKey) {
+                        sendMNProtocol('mnzotero://checkDocument?attachmentKey=' + encodeURIComponent(attachmentKey));
+                    });
                 } else {
-                    cards = await Promise.all(items.map(async function (item) {
+                    // --- Cloud mode (parallel WebView fetch) ---
+                    var cloudItems = await Promise.all(items.map(async function (item) {
                         var d = item.data;
                         var pdf = null;
+                        var pdfFilename = null;
                         try {
                             var r2 = await doFetch(base + '/items/' + d.key + '/children', { headers: headers });
                             if (r2.ok) {
                                 var kids = await r2.json();
                                 var p = kids.find(function (k) { return k.data.itemType === 'attachment' && (k.data.contentType === 'application/pdf' || (k.data.filename || '').endsWith('.pdf')); });
-                                if (p) pdf = p.data.key;
+                                if (p) { pdf = p.data.key; pdfFilename = p.data.filename || null; }
                             }
                         } catch (e) { }
+                        return { d: d, pdf: pdf, pdfFilename: pdfFilename };
+                    }));
+
+                    // Build cards and collect {attachmentKey -> filename} for batch eye check
+                    var cloudEyePayload = {};
+                    cards = cloudItems.map(function(ci) {
+                        var d = ci.d, pdf = ci.pdf;
                         var u = slug || 'user';
                         var lItem = 'zotero://select/library/items/' + d.key;
                         var cItem = 'https://www.zotero.org/' + u + '/items/' + d.key;
                         var btns = '<a href="' + lItem + '" class="pill pill-zotero">' + T('open_in_zotero') + '</a><a href="' + cItem + '" target="_blank" class="pill pill-web">' + T('web') + '</a>';
+                        var lPdf = '', cPdf = '';
                         if (pdf) {
-                            var lPdf = 'zotero://open-pdf/library/items/' + pdf;
-                            var cPdf = 'https://www.zotero.org/' + u + '/items/' + d.key + '/attachment/' + pdf + '/reader';
+                            lPdf = 'zotero://open-pdf/library/items/' + pdf;
+                            cPdf = 'https://www.zotero.org/' + u + '/items/' + d.key + '/attachment/' + pdf + '/reader';
                             btns += '<a href="' + lPdf + '" class="pill pill-pdf">' + T('local_pdf') + '</a><a href="' + cPdf + '" target="_blank" class="pill pill-web">' + T('cloud_pdf') + '</a>';
                         }
                         var addTitle = (d.title || T('Untitled')).replace(/"/g, '"');
@@ -758,10 +811,17 @@
                             var safeTitle = (d.title || T('Untitled')).replace(/"/g, '"');
                             var safeKey = String(key || '').replace(/"/g, '"');
                             actionButtons += '<a href="#" class="add-to-mn-btn download-pdf-btn" title="' + T('download_pdf') + '" data-uid="' + uid + '" data-attachment-key="' + pdf + '" data-file-name="' + safeTitle + '" data-api-key="' + safeKey + '">' + buildDownloadPdfIcon() + '</a>';
+                            actionButtons += '<button class="open-in-mn-btn loading" data-attachment-key="' + pdf + '" title="Open in MarginNote"></button>';
+                            if (ci.pdfFilename) cloudEyePayload[pdf] = ci.pdfFilename;
                         }
                         actionButtons += '<a href="' + createNoteUrl + '" class="add-to-mn-btn" title="' + T('add_to_mn') + '">+</a>';
                         return '<div class="list-item"><div class="list-item-body"><div class="list-title">' + addTitle + '</div><div class="meta-row"><span>' + author + '</span><span>' + (d.date || '') + '</span><span class="item-type-tag">' + d.itemType + '</span></div><div class="action-row">' + btns + '</div></div><div class="list-item-actions">' + actionButtons + '</div></div>';
-                    }));
+                    });
+
+                    if (Object.keys(cloudEyePayload).length > 0) {
+                        var payloadStr = JSON.stringify(cloudEyePayload);
+                        sendMNProtocol('mnzotero://checkDocuments?payload=' + encodeURIComponent(payloadStr));
+                    }
                 }
 
                 ui.out.innerHTML = '<div class="list-container">' + cards.join('') + '</div>';
