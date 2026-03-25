@@ -650,12 +650,12 @@ select:focus {
     }
 }
 
-.download-pdf-btn .pdf-plus-mark {
+.download-pdf-btn .pdf-download-mark {
     opacity: 1;
     transition: opacity 180ms ease;
 }
 
-.download-pdf-btn .pdf-plus-badge {
+.download-pdf-btn .pdf-download-badge {
     opacity: 1;
     transition: opacity 180ms ease;
 }
@@ -665,11 +665,11 @@ select:focus {
     pointer-events: none;
 }
 
-.download-pdf-btn.is-downloading .pdf-plus-mark {
+.download-pdf-btn.is-downloading .pdf-download-mark {
     opacity: 0;
 }
 
-.download-pdf-btn.is-downloading .pdf-plus-badge {
+.download-pdf-btn.is-downloading .pdf-download-badge {
     opacity: 0;
 }
 
