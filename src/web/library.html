@@ -588,6 +588,16 @@
             });
         }
 
+        function insertActionButtonsBeforeAdd(actionContainer, html) {
+            if (!actionContainer || !html) return;
+            var addBtn = actionContainer.querySelector('.add-to-mn-btn:not(.download-pdf-btn)');
+            if (addBtn && addBtn.insertAdjacentHTML) {
+                addBtn.insertAdjacentHTML('beforebegin', html);
+            } else {
+                actionContainer.insertAdjacentHTML('beforeend', html);
+            }
+        }
+
         window.addEventListener('resize', function () {
             relayoutAllActionButtons();
         });
@@ -742,7 +752,7 @@
                     var eyeBtnHtml = '<button class="open-in-mn-btn loading" data-attachment-key="' + pdf + '" title="Open in MarginNote"></button>';
                     
                     // Update actionContainer
-                    actionContainer.insertAdjacentHTML('afterbegin', dlBtnHtml + eyeBtnHtml);
+                    insertActionButtonsBeforeAdd(actionContainer, dlBtnHtml + eyeBtnHtml);
                     layoutActionButtons(actionContainer);
                     
                     // Trigger checkDocument for this eye button
@@ -757,7 +767,7 @@
                         if (annos && annos.length > 0) {
                             var importUrl = 'mnzotero://importAnnotations?parentKey=' + encodeURIComponent(d.key) + '&attachmentKey=' + encodeURIComponent(pdf) + '&uid=' + encodeURIComponent(uid) + '&key=' + encodeURIComponent(key);
                             var importBtnHtml = '<a href="' + importUrl + '" class="import-annotations-btn" title="' + T('import_annotations') + '">' + buildImportAnnotationsIcon() + '</a>';
-                            actionContainer.insertAdjacentHTML('beforeend', importBtnHtml);
+                            insertActionButtonsBeforeAdd(actionContainer, importBtnHtml);
                             layoutActionButtons(actionContainer);
                         }
                     }
