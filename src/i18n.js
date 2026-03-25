@@ -56,7 +56,10 @@ var Si18n = (function () {
     "field_thesis_type": "论文类型",
     "field_university": "大学",
     "field_extra": "额外信息",
-    "field_creators": "作者列表"
+    "field_creators": "作者列表",
+    "fetching_annotations": "正在获取标注...",
+    "imported_annotations": "已导入 {count} 条标注",
+    "target_literature_note_not_found": "未在当前笔记本中找到对应的文献笔记"
   };
 
   // 翻译数据（英文）
@@ -110,7 +113,10 @@ var Si18n = (function () {
     "field_thesis_type": "Thesis Type",
     "field_university": "University",
     "field_extra": "Extra",
-    "field_creators": "Creators"
+    "field_creators": "Creators",
+    "fetching_annotations": "Fetching annotations...",
+    "imported_annotations": "Imported {count} annotations",
+    "target_literature_note_not_found": "Target literature note not found in current notebook"
   };
 
   // 当前使用的翻译数据

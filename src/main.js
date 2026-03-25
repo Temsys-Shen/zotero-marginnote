@@ -8,6 +8,7 @@ JSB.newAddon = function (mainPath) {
   JSB.require('SyncMetadata');
   JSB.require('MNTreeExportService');
   JSB.require('ZoteroNoteSyncService');
+  JSB.require('AnnotationImportService');
   var newAddonClass = JSB.defineClass('SZSampleWAddon : JSExtension', /*Instance members*/{
     //Window initialize
     sceneWillConnect: function () {

@@ -598,9 +598,15 @@ select:focus {
 
 .list-item-actions {
     flex-shrink: 0;
-    display: inline-flex;
+    --action-size: 36px;
+    --action-gap: 6px;
+    display: flex;
+    flex-wrap: wrap;
+    width: calc(var(--action-size) * 2 + var(--action-gap));
+    gap: var(--action-gap);
     align-items: center;
-    gap: 8px;
+    align-content: center;
+    justify-content: flex-end;
 }
 
 .add-to-mn-btn {
@@ -757,12 +763,43 @@ select:focus {
     opacity: 0.5;
 }
 
+.import-annotations-btn {
+    flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    border-radius: 10px;
+    background: var(--accent-bg);
+    color: var(--accent);
+    text-decoration: none;
+    transition: opacity 0.2s;
+    cursor: pointer;
+    border: none;
+    padding: 0;
+}
+
+.import-annotations-btn:hover {
+    opacity: 0.9;
+}
+
+.import-annotations-btn:active {
+    opacity: 0.7;
+}
+
+.import-annotations-icon {
+    width: 20px;
+    height: 20px;
+}
+
 @keyframes mn-eye-spin {
     from { transform: rotate(0deg); }
     to { transform: rotate(360deg); }
 }
 
-.open-in-mn-btn.loading::after {
+.open-in-mn-btn.loading::after,
+.import-annotations-btn.loading::after {
     content: '';
     display: block;
     width: 14px;
@@ -771,6 +808,10 @@ select:focus {
     border-top-color: transparent;
     border-radius: 50%;
     animation: mn-eye-spin 0.7s linear infinite;
+}
+
+.import-annotations-btn.loading svg {
+    display: none;
 }
 
 

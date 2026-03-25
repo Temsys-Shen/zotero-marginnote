@@ -531,6 +531,67 @@
             return '<svg class="pdf-download-icon" viewBox="0 0 100 100" aria-hidden="true"><g class="pdf-rotor"><rect width="100" height="100" rx="8" fill="#E53935"></rect><text x="50%" y="52%" font-family="Arial, sans-serif" font-size="28" font-weight="bold" fill="white" text-anchor="middle" dominant-baseline="middle">PDF</text><circle class="pdf-download-badge" cx="80" cy="80" r="12" fill="white"></circle><path class="pdf-download-mark" d="M80 73 V85 M75 80 L80 85 L85 80" stroke="#E53935" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"></path></g></svg>';
         }
 
+        function buildImportAnnotationsIcon() {
+            return '<svg class="import-annotations-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"></path><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path><circle cx="19" cy="19" r="4.5" fill="white" stroke="none"></circle><path d="M19 16.5v5M16.5 19h5" stroke-width="2"></path></svg>';
+        }
+
+        var ACTION_BTN_SIZE = 36;
+        var ACTION_BTN_GAP = 6;
+
+        function getActionButtonElements(actionContainer) {
+            if (!actionContainer) return [];
+            return Array.prototype.filter.call(actionContainer.children, function (el) {
+                if (!el || !el.classList) return false;
+                if (el.style && el.style.display === 'none') return false;
+                return el.classList.contains('add-to-mn-btn') || el.classList.contains('open-in-mn-btn') || el.classList.contains('import-annotations-btn');
+            });
+        }
+
+        function calcActionColumns(buttonCount, listItemWidth) {
+            if (buttonCount <= 1) return 1;
+            var maxPanelWidth = Math.floor((listItemWidth || 0) / 3);
+            var widthForCols = function (cols) {
+                return ACTION_BTN_SIZE * cols + ACTION_BTN_GAP * Math.max(0, cols - 1);
+            };
+
+            if (buttonCount === 2) {
+                return widthForCols(2) <= maxPanelWidth ? 2 : 1;
+            }
+            if (buttonCount === 3) {
+                return widthForCols(3) <= maxPanelWidth ? 3 : 1;
+            }
+            if (buttonCount === 4) {
+                return widthForCols(2) <= maxPanelWidth ? 2 : 1;
+            }
+            return 1;
+        }
+
+        function layoutActionButtons(actionContainer) {
+            if (!actionContainer) return;
+            var listItem = actionContainer.closest('.list-item');
+            var buttons = getActionButtonElements(actionContainer);
+            var count = buttons.length;
+            if (count <= 0) return;
+
+            var cols = calcActionColumns(count, listItem ? listItem.clientWidth : 0);
+            var width = ACTION_BTN_SIZE * cols + ACTION_BTN_GAP * Math.max(0, cols - 1);
+
+            actionContainer.style.width = width + 'px';
+            actionContainer.setAttribute('data-btn-count', String(count));
+            actionContainer.setAttribute('data-btn-cols', String(cols));
+        }
+
+        function relayoutAllActionButtons() {
+            var list = document.querySelectorAll('.list-item-actions');
+            Array.prototype.forEach.call(list, function (actionContainer) {
+                layoutActionButtons(actionContainer);
+            });
+        }
+
+        window.addEventListener('resize', function () {
+            relayoutAllActionButtons();
+        });
+
         var __mnDownloadPending = {};
         var __mnSeq = 0;
 
@@ -634,6 +695,7 @@
                 // Failure / No Match -> hide button
                 btn.style.display = 'none';
             }
+            layoutActionButtons(btn.closest('.list-item-actions'));
         };
 
         window.onMNDocumentCheckBatch = function(results) {
@@ -653,6 +715,57 @@
                 sendMNProtocol('mnzotero://openDocument?docMd5=' + encodeURIComponent(docMd5));
             }
         });
+
+        async function loadItemAttachments(item, actionContainer) {
+            var cfg = window.__mnConfig || {};
+            var uid = cfg.uid || '0';
+            var key = cfg.key || '';
+            var slug = cfg.slug || '';
+            var base = '/users/' + uid;
+            var d = item.data;
+            
+            try {
+                var r_kids = await smartFetch(base + '/items/' + d.key + '/children', { forceCloud: true });
+                if (!r_kids.ok) return;
+                var kids = await r_kids.json();
+                
+                var p = kids.find(function (k) { return k.data.itemType === 'attachment' && (k.data.contentType === 'application/pdf' || (k.data.filename || '').endsWith('.pdf')); });
+                if (p) {
+                    var pdf = p.data.key;
+                    var pdfFilename = p.data.filename || d.title || T('Untitled');
+                    var safeKey = String(key || '').replace(/"/g, '"');
+                    
+                    // Add Download PDF button
+                    var dlBtnHtml = '<a href="#" class="add-to-mn-btn download-pdf-btn" title="' + T('download_pdf') + '" data-uid="' + uid + '" data-attachment-key="' + pdf + '" data-file-name="' + pdfFilename + '" data-api-key="' + safeKey + '">' + buildDownloadPdfIcon() + '</a>';
+                    
+                    // Add Open in MN button (eye)
+                    var eyeBtnHtml = '<button class="open-in-mn-btn loading" data-attachment-key="' + pdf + '" title="Open in MarginNote"></button>';
+                    
+                    // Update actionContainer
+                    actionContainer.insertAdjacentHTML('afterbegin', dlBtnHtml + eyeBtnHtml);
+                    layoutActionButtons(actionContainer);
+                    
+                    // Trigger checkDocument for this eye button
+                    var eyePayload = {};
+                    eyePayload[pdf] = pdfFilename;
+                    sendMNProtocol('mnzotero://checkDocuments?payload=' + encodeURIComponent(JSON.stringify(eyePayload)));
+
+                    // Now check for annotations under this PDF
+                    var r_annos = await smartFetch(base + '/items/' + pdf + '/children?itemType=annotation&limit=1', { forceCloud: true });
+                    if (r_annos.ok) {
+                        var annos = await r_annos.json();
+                        if (annos && annos.length > 0) {
+                            var importUrl = 'mnzotero://importAnnotations?parentKey=' + encodeURIComponent(d.key) + '&attachmentKey=' + encodeURIComponent(pdf) + '&uid=' + encodeURIComponent(uid) + '&key=' + encodeURIComponent(key);
+                            var importBtnHtml = '<a href="' + importUrl + '" class="import-annotations-btn" title="' + T('import_annotations') + '">' + buildImportAnnotationsIcon() + '</a>';
+                            actionContainer.insertAdjacentHTML('beforeend', importBtnHtml);
+                            layoutActionButtons(actionContainer);
+                        }
+                    }
+                }
+            } catch (e) {
+                console.error('Failed to load attachments for ' + d.key, e);
+            }
+        }
 
         async function run() {
             const q = $('q').value.trim();
@@ -697,64 +810,51 @@
                 else renderTagsList(extractedTags, currentSearchTerm);
 
                 if (!items.length) { ui.log.innerText = (typeof T === 'function' ? T('no_matches_found') : 'No matches found'); return; }
-                ui.log.innerText = `Fetching attachments for ${items.length} items...`;
+                ui.log.style.display = 'none';
 
-                var processedItems = await Promise.all(items.map(async function (item) {
+                var listContainer = document.createElement('div');
+                listContainer.className = 'list-container';
+                ui.out.appendChild(listContainer);
+
+                items.forEach(function(item) {
                     var d = item.data;
-                    var pdf = null;
-                    var pdfFilename = null;
-                    try {
-                        var r_kids = await smartFetch(base + '/items/' + d.key + '/children');
-                        if (r_kids.ok) {
-                            var kids = await r_kids.json();
-                            var p = kids.find(function (k) { return k.data.itemType === 'attachment' && (k.data.contentType === 'application/pdf' || (k.data.filename || '').endsWith('.pdf')); });
-                            if (p) { pdf = p.data.key; pdfFilename = p.data.filename || null; }
-                        }
-                    } catch (e) { }
-                    return { d: d, pdf: pdf, pdfFilename: pdfFilename };
-                }));
-
-                var eyePayload = {};
-                var cards = processedItems.map(function(ci) {
-                    var d = ci.d, pdf = ci.pdf;
                     var u = (typeof slug !== 'undefined' && slug) ? slug : 'user';
                     var lItem = 'zotero://select/library/items/' + d.key;
                     var cItem = 'https://www.zotero.org/' + u + '/items/' + d.key;
                     
-                    var btns = '<a href="' + lItem + '" class="pill pill-zotero">' + T('open_in_zotero') + '</a>';
-                    btns += '<a href="' + cItem + '" target="_blank" class="pill pill-web">' + T('web') + '</a>';
-                    
-                    var lPdf = '', cPdf = '';
-                    if (pdf) {
-                        lPdf = 'zotero://open-pdf/library/items/' + pdf;
-                        cPdf = 'https://www.zotero.org/' + u + '/items/' + d.key + '/attachment/' + pdf + '/reader';
-                        btns += '<a href="' + lPdf + '" class="pill pill-pdf">' + T('local_pdf') + '</a>';
-                        btns += '<a href="' + cPdf + '" target="_blank" class="pill pill-web">' + T('cloud_pdf') + '</a>';
-                    }
+                    var btnsHtml = '<a href="' + lItem + '" class="pill pill-zotero">' + T('open_in_zotero') + '</a>';
+                    btnsHtml += '<a href="' + cItem + '" target="_blank" class="pill pill-web">' + T('web') + '</a>';
                     
                     var addTitle = (d.title || T('Untitled')).replace(/"/g, '"');
                     var author = (d.creators && d.creators[0] && (d.creators[0].lastName || d.creators[0].name)) || T('unknown');
                     var fieldTemplates = getFieldTemplates();
-                    var createNoteUrl = buildCreateNoteUrl((d.title || T('Untitled')), d.itemType, (d.date || '').substring(0, 4), author, lItem, pdf ? lPdf : '', cItem, pdf ? cPdf : '', d.key, 'C', uid, key, d, fieldTemplates);
                     
-                    var actionButtons = '';
-                    if (pdf) {
-                        var safeKey = String(key || '').replace(/"/g, '"');
-                        actionButtons += '<a href="#" class="add-to-mn-btn download-pdf-btn" title="' + T('download_pdf') + '" data-uid="' + uid + '" data-attachment-key="' + pdf + '" data-file-name="' + (ci.pdfFilename || addTitle) + '" data-api-key="' + safeKey + '">' + buildDownloadPdfIcon() + '</a>';
-                        actionButtons += '<button class="open-in-mn-btn loading" data-attachment-key="' + pdf + '" title="Open in MarginNote"></button>';
-                        if (ci.pdfFilename) eyePayload[pdf] = ci.pdfFilename;
-                    }
-                    actionButtons += '<a href="' + createNoteUrl + '" class="add-to-mn-btn" title="' + T('add_to_mn') + '">+</a>';
+                    // Add URL is built but PDF URLs are unknown yet
+                    var createNoteUrl = buildCreateNoteUrl((d.title || T('Untitled')), d.itemType, (d.date || '').substring(0, 4), author, lItem, '', cItem, '', d.key, 'C', uid, key, d, fieldTemplates);
                     
-                    return '<div class="list-item"><div class="list-item-body"><div class="list-title">' + addTitle + '</div><div class="meta-row"><span>' + author + '</span><span>' + (d.date || '') + '</span><span class="item-type-tag">' + d.itemType + '</span></div><div class="action-row">' + btns + '</div></div><div class="list-item-actions">' + actionButtons + '</div></div>';
+                    var itemEl = document.createElement('div');
+                    itemEl.className = 'list-item';
+                    itemEl.innerHTML = `
+                        <div class="list-item-body">
+                            <div class="list-title">${escapeHtml(addTitle)}</div>
+                            <div class="meta-row">
+                                <span>${escapeHtml(author)}</span>
+                                <span>${escapeHtml(d.date || '')}</span>
+                                <span class="item-type-tag">${escapeHtml(d.itemType)}</span>
+                            </div>
+                            <div class="action-row">${btnsHtml}</div>
+                        </div>
+                        <div class="list-item-actions">
+                            <a href="${createNoteUrl}" class="add-to-mn-btn" title="${T('add_to_mn')}">+</a>
+                        </div>
+                    `;
+                    listContainer.appendChild(itemEl);
+                    
+                    // Async load attachments
+                    var actionContainer = itemEl.querySelector('.list-item-actions');
+                    layoutActionButtons(actionContainer);
+                    loadItemAttachments(item, actionContainer);
                 });
-
-                if (Object.keys(eyePayload).length > 0) {
-                    sendMNProtocol('mnzotero://checkDocuments?payload=' + encodeURIComponent(JSON.stringify(eyePayload)));
-                }
-
-                ui.out.innerHTML = '<div class="list-container">' + cards.join('') + '</div>';
-                ui.log.style.display = 'none';
 
             } catch (e) { ui.log.innerText = 'Error: ' + e.message; }
             finally { 

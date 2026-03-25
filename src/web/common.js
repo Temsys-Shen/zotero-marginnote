@@ -297,15 +297,18 @@ async function smartFetch(path, options) {
     var cfg = window.__mnConfig || {};
     var uid = cfg.uid || '0';
     var key = cfg.key || '';
+    var forceCloud = !!opts.forceCloud;
+    var requestOpts = Object.assign({}, opts);
+    if (requestOpts.forceCloud !== undefined) delete requestOpts.forceCloud;
 
     // 1. Try Local API (using user 0)
     // Circuit breaker: skip if failed in the last 10 seconds
-    if (Date.now() - lastLocalFailureTime > 10000) {
+    if (!forceCloud && Date.now() - lastLocalFailureTime > 10000) {
         var localPath = path.replace(new RegExp('/users/' + uid), '/users/0');
         var localUrl = 'http://localhost:23119/api' + localPath;
         console.log('[Network] Try Local: ' + localPath);
         try {
-            var res = await localFetch(localUrl, opts);
+            var res = await localFetch(localUrl, requestOpts);
             if (res.ok) {
                 console.log('[Network] Success (Local): ' + localPath);
                 return res;
@@ -316,19 +319,21 @@ async function smartFetch(path, options) {
             console.log('[Network] Error (Local): ' + localPath + '. Message: ' + e.message);
             lastLocalFailureTime = Date.now();
         }
-    } else {
+    } else if (!forceCloud) {
         console.log('[Network] Circuit Breaker Active. Skip Local: ' + path);
+    } else {
+        console.log('[Network] Force Cloud: ' + path);
     }
 
     // 2. Try Cloud API
     var cloudUrl = 'https://api.zotero.org' + path;
-    var headers = Object.assign({}, opts.headers || {}, {
+    var headers = Object.assign({}, requestOpts.headers || {}, {
         'Zotero-API-Version': 3
     });
     if (key) headers['Zotero-API-Key'] = key;
     
     console.log('[Network] Fallback/Direct Cloud: ' + path);
-    return fetch(cloudUrl, Object.assign({}, opts, { headers: headers })).then(function(res) {
+    return fetch(cloudUrl, Object.assign({}, requestOpts, { headers: headers })).then(function(res) {
         console.log('[Network] Result (Cloud): ' + path + ' (Status: ' + res.status + ')');
         return res;
     });

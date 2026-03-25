@@ -393,9 +393,16 @@ var SZZoteroBridge = class {
       return false;
     }
 
+
     if (host === 'openDocument' || path.indexOf('openDocument') !== -1) {
       const queryString = SZZoteroBridge._getQueryString(url, urlString);
       SZZoteroBridge._handleOpenDocument(self, queryString);
+      return false;
+    }
+
+    if (host === 'importAnnotations' || path.indexOf('importAnnotations') !== -1) {
+      const queryString = SZZoteroBridge._getQueryString(url, urlString);
+      SZZoteroBridge._handleImportAnnotations(self, queryString);
       return false;
     }
 
@@ -801,6 +808,15 @@ var SZZoteroBridge = class {
     }
 
     return { notebookId: notebookId, docMd5: docMd5 };
+  }
+
+  static _handleImportAnnotations(self, queryString) {
+    const params = SZZoteroBridge._parseQueryString(queryString);
+    if (!params.attachmentKey || !params.uid) return;
+    
+    if (typeof AnnotationImportService !== 'undefined' && AnnotationImportService.importAnnotations) {
+      AnnotationImportService.importAnnotations(params, self);
+    }
   }
 
   static _resolveCurrentNotebookId(self) {
