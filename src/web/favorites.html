@@ -1,0 +1,987 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+    <title>Zotero Connector - Favorites</title>
+    <link rel="stylesheet" href="common.css">
+    <script src="i18n.js"></script>
+</head>
+
+<body>
+    <header>
+        <div class="view-switcher">
+            <span class="view-option" data-view="library" role="button">Library</span>
+            <span class="view-option active" data-view="favorites" role="button">Favorites</span>
+            <span class="view-option" data-view="selected" role="button">Selected Cards</span>
+            <span class="view-option" data-view="settings" role="button">Settings</span>
+        </div>
+    </header>
+
+    <div id="favorites-layout">
+        <aside id="favorites-sidebar">
+            <div class="sidebar-header-row">
+                <div class="sidebar-header">Tags</div>
+                <button id="btn-new-tag" class="sidebar-mini-btn" type="button">+</button>
+            </div>
+            <div id="favorites-tag-tree"></div>
+        </aside>
+
+        <main id="favorites-main">
+            <div class="favorites-toolbar">
+                <button id="btn-select-all" type="button"></button>
+                <button id="btn-invert" type="button"></button>
+                <div class="batch-import-group">
+                    <button id="btn-batch-import" type="button"></button>
+                    <button id="btn-batch-options" type="button">▾</button>
+                    <div id="batch-options-menu" class="batch-options-menu hidden">
+                        <label id="label-import-card"><input type="checkbox" id="opt-import-card" checked>文献卡片</label>
+                        <label id="label-import-pdf"><input type="checkbox" id="opt-import-pdf">PDF</label>
+                        <label id="label-import-annotation"><input type="checkbox" id="opt-import-annotation">导入标注</label>
+                    </div>
+                </div>
+                <button id="btn-remove-tag" type="button"></button>
+                <button id="btn-clear-tag" type="button"></button>
+                <button id="btn-refresh-favorites" type="button"></button>
+            </div>
+            <div id="favorites-status" class="favorites-status"></div>
+            <div id="favorites-content">
+                <div id="favorites-log" class="selected-empty-state"></div>
+                <div id="favorites-list" class="list-container" style="display:none"></div>
+            </div>
+        </main>
+    </div>
+
+    <div id="tag-edit-modal" class="mn-onboarding-modal" style="display:none">
+        <div class="mn-onboarding-overlay"></div>
+        <div class="mn-onboarding-card">
+            <h3 id="tag-edit-title"></h3>
+            <input id="tag-edit-input" placeholder="Tag">
+            <div class="tag-edit-actions">
+                <button id="btn-tag-delete" type="button" class="danger"></button>
+                <button id="btn-tag-cancel" type="button"></button>
+                <button id="btn-tag-save" type="button" class="primary"></button>
+            </div>
+        </div>
+    </div>
+
+    <script src="common.js"></script>
+    <script>
+        var favoriteState = {
+            items: [],
+            tags: [],
+            filterType: 'all',
+            tagId: '',
+            selectedKeys: {},
+            batch: { card: true, pdf: false, annotation: false }
+        };
+
+        var __mnFavoritesResolver = null;
+        var __mnDownloadPending = {};
+        var __mnSeq = 0;
+        var tagModalMode = 'edit';
+        var touchDragState = null;
+
+        function escapeHtml(text) {
+            if (!text && text !== 0) return '';
+            return String(text).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+        }
+
+        function sendMNProtocol(url) {
+            var iframe = document.createElement('iframe');
+            iframe.style.display = 'none';
+            iframe.src = url;
+            document.body.appendChild(iframe);
+            setTimeout(function () { try { iframe.remove(); } catch (e) { } }, 600);
+        }
+
+        function buildCreateNoteUrl(entry) {
+            var d = (entry && entry.snapshot) || {};
+            var uid = entry && entry.uid ? String(entry.uid) : String((window.__mnConfig && window.__mnConfig.uid) || '0');
+            var key = entry && entry.apiKey ? String(entry.apiKey) : String((window.__mnConfig && window.__mnConfig.key) || '');
+            var slug = entry && entry.slug ? String(entry.slug) : String((window.__mnConfig && window.__mnConfig.slug) || '');
+            var creators = Array.isArray(d.creators) ? d.creators : [];
+            var firstCreator = creators.length ? creators[0] : null;
+            var author = (firstCreator && (firstCreator.lastName || firstCreator.name)) || T('unknown');
+            var lItem = 'zotero://select/library/items/' + (entry.itemKey || '');
+            var cItem = 'https://www.zotero.org/' + (slug || 'user') + '/items/' + (entry.itemKey || '');
+            var q = [
+                'title=' + encodeURIComponent(d.title || T('Untitled')),
+                'type=' + encodeURIComponent(d.itemType || ''),
+                'year=' + encodeURIComponent((d.date || '').substring(0, 4)),
+                'author=' + encodeURIComponent(author),
+                'lZ=' + encodeURIComponent(lItem),
+                'itemKey=' + encodeURIComponent(entry.itemKey || ''),
+                'mode=' + encodeURIComponent('C'),
+                'uid=' + encodeURIComponent(uid),
+                'key=' + encodeURIComponent(key),
+                'lW=' + encodeURIComponent(cItem)
+            ];
+            return 'mnzotero://createNote?' + q.join('&');
+        }
+
+        function buildDownloadPdfIcon() {
+            return '<svg class="pdf-download-icon" viewBox="0 0 100 100" aria-hidden="true"><g class="pdf-rotor"><rect width="100" height="100" rx="8" fill="#E53935"></rect><text x="50%" y="52%" font-family="Arial, sans-serif" font-size="28" font-weight="bold" fill="white" text-anchor="middle" dominant-baseline="middle">PDF</text><circle class="pdf-download-badge" cx="80" cy="80" r="12" fill="white"></circle><path class="pdf-download-mark" d="M80 73 V85 M75 80 L80 85 L85 80" stroke="#E53935" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"></path></g></svg>';
+        }
+
+        function buildImportAnnotationsIcon() {
+            return '<svg class="import-annotations-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"></path><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path><circle cx="19" cy="19" r="4.5" fill="white" stroke="none"></circle><path d="M19 16.5v5M16.5 19h5" stroke-width="2"></path></svg>';
+        }
+
+        function createMNRequestId() {
+            __mnSeq += 1;
+            return 'mn_dl_' + Date.now() + '_' + __mnSeq;
+        }
+
+        function startDownloadButtonMotion(btn) {
+            var rotor = btn.querySelector('.pdf-rotor');
+            if (!rotor) return null;
+            var downloadMark = btn.querySelector('.pdf-download-mark');
+            btn.classList.remove('is-finishing', 'is-success', 'is-failed');
+            btn.classList.add('is-downloading');
+            if (downloadMark) downloadMark.style.opacity = '0';
+            rotor.style.animation = 'none';
+            rotor.offsetHeight;
+            rotor.style.animation = 'mn-download-spin 0.9s linear infinite';
+            return { rotor: rotor };
+        }
+
+        function finishDownloadButtonMotion(btn, state, ok) {
+            if (!btn) return;
+            btn.classList.add('is-finishing');
+            if (ok) btn.classList.add('is-success');
+            else btn.classList.add('is-failed');
+            setTimeout(function () {
+                var rotor = state && state.rotor ? state.rotor : btn.querySelector('.pdf-rotor');
+                var downloadMark = btn.querySelector('.pdf-download-mark');
+                if (rotor) {
+                    rotor.style.animation = 'none';
+                    rotor.style.transform = 'rotate(0deg)';
+                }
+                if (downloadMark) downloadMark.style.opacity = '';
+                btn.classList.remove('is-downloading', 'is-finishing', 'is-success', 'is-failed');
+            }, 350);
+        }
+
+        function parseFavoritesPayload(raw) {
+            if (!raw) return { items: [], tags: [] };
+            var parsed = {};
+            try {
+                parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;
+            } catch (e) {
+                parsed = { items: [], tags: [] };
+            }
+            return {
+                items: Array.isArray(parsed.items) ? parsed.items : [],
+                tags: Array.isArray(parsed.tags) ? parsed.tags : []
+            };
+        }
+
+        function requestFavoritesList() {
+            return new Promise(function(resolve) {
+                __mnFavoritesResolver = resolve;
+                sendMNProtocol('mnzotero://favorites?action=list');
+                setTimeout(function() {
+                    if (__mnFavoritesResolver) {
+                        var fn = __mnFavoritesResolver;
+                        __mnFavoritesResolver = null;
+                        var fallback = { items: [], tags: [] };
+                        favoriteState.items = fallback.items;
+                        favoriteState.tags = fallback.tags;
+                        renderTagSidebar();
+                        renderFavoritesList();
+                        fn(fallback);
+                    }
+                }, 1500);
+            });
+        }
+
+        function persistFavoriteEntry(entry) {
+            sendMNProtocol('mnzotero://favorites?action=upsert&payload=' + encodeURIComponent(JSON.stringify(entry)));
+        }
+
+        function persistFavoriteEntries(entries) {
+            sendMNProtocol('mnzotero://favorites?action=bulkUpsert&payload=' + encodeURIComponent(JSON.stringify(entries || [])));
+        }
+
+        window.onMNFavoritesList = function() {
+            var payload = parseFavoritesPayload(window.__mnFavoritesPayload);
+            favoriteState.items = payload.items;
+            favoriteState.tags = payload.tags;
+            var selected = favoriteState.selectedKeys;
+            var next = {};
+            favoriteState.items.forEach(function(entry) {
+                var key = String(entry.itemKey || '');
+                if (!key) return;
+                if (selected[key]) next[key] = true;
+            });
+            favoriteState.selectedKeys = next;
+            renderTagSidebar();
+            renderFavoritesList();
+            if (__mnFavoritesResolver) {
+                var fn = __mnFavoritesResolver;
+                __mnFavoritesResolver = null;
+                fn(payload);
+            }
+        };
+
+        window.onMNBatchImportResult = function() {
+            var result = window.__mnBatchImportResult || { success: 0, skipped: 0, failed: 0 };
+            var text = T('batch_import_success') + '，' + T('batch_import_report', {
+                success: String(result.success || 0),
+                skipped: String(result.skipped || 0),
+                failed: String(result.failed || 0)
+            });
+            setStatus(text, 'success');
+        };
+
+        window.onMNDownloadResult = function (requestId, ok) {
+            var entry = __mnDownloadPending[requestId];
+            if (!entry) return;
+            delete __mnDownloadPending[requestId];
+            finishDownloadButtonMotion(entry.button, entry.motion, !!ok);
+        };
+
+        window.onMNDocumentCheck = function(attachmentKey, docMd5) {
+            var list = document.querySelectorAll('.open-in-mn-btn[data-attachment-key="' + attachmentKey + '"]');
+            Array.prototype.forEach.call(list, function(btn) {
+                btn.classList.remove('loading');
+                if (docMd5) {
+                    btn.innerHTML = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>';
+                    btn.dataset.docMd5 = docMd5;
+                    var itemKey = btn.getAttribute('data-item-key') || '';
+                    if (!itemKey) return;
+                    var entry = findFavoriteByItemKey(itemKey);
+                    if (!entry) return;
+                    entry.docMd5 = docMd5;
+                    persistFavoriteEntry(entry);
+                } else {
+                    btn.style.display = 'none';
+                }
+            });
+        };
+
+        window.onMNDocumentCheckBatch = function(results) {
+            Object.keys(results || {}).forEach(function(key) {
+                window.onMNDocumentCheck(key, results[key]);
+            });
+        };
+
+        function findFavoriteByItemKey(itemKey) {
+            var key = String(itemKey || '');
+            for (var i = 0; i < favoriteState.items.length; i++) {
+                var entry = favoriteState.items[i];
+                if (String(entry.itemKey || '') === key) return entry;
+            }
+            return null;
+        }
+
+        function filterFavorites() {
+            if (favoriteState.filterType === 'all') return favoriteState.items.slice();
+            if (favoriteState.filterType === 'untagged') {
+                return favoriteState.items.filter(function(entry) {
+                    return !Array.isArray(entry.tags) || entry.tags.length === 0;
+                });
+            }
+            if (favoriteState.filterType === 'tag') {
+                var target = favoriteState.tagId;
+                return favoriteState.items.filter(function(entry) {
+                    return Array.isArray(entry.tags) && entry.tags.indexOf(target) > -1;
+                });
+            }
+            return favoriteState.items.slice();
+        }
+
+        function setStatus(text, type) {
+            var el = $('favorites-status');
+            if (!el) return;
+            el.textContent = text || '';
+            el.classList.remove('success');
+            el.classList.remove('error');
+            if (type) el.classList.add(type);
+        }
+
+        function renderTagSidebar() {
+            var container = $('favorites-tag-tree');
+            if (!container) return;
+            var tags = favoriteState.tags || [];
+            var html = '';
+            html += '<div class="favorite-tag-item' + (favoriteState.filterType === 'all' ? ' active' : '') + '" data-filter-type="all">' + escapeHtml(T('all_favorites')) + '</div>';
+            html += '<div class="favorite-tag-item' + (favoriteState.filterType === 'untagged' ? ' active' : '') + '" data-filter-type="untagged">' + escapeHtml(T('untagged_favorites')) + '</div>';
+            tags.forEach(function(tag) {
+                var active = favoriteState.filterType === 'tag' && favoriteState.tagId === tag;
+                html += '<div class="favorite-tag-item tag-node' + (active ? ' active' : '') + '" data-filter-type="tag" data-tag-id="' + escapeHtml(tag) + '"><span class="tag-label">' + escapeHtml(tag) + '</span><button type="button" class="tag-edit-btn" data-tag-id="' + escapeHtml(tag) + '" title="' + escapeHtml(T('edit_tag')) + '">✎</button></div>';
+            });
+            container.innerHTML = html;
+            updateToolbarState();
+        }
+
+        function getSelectedItemKeys() {
+            return Object.keys(favoriteState.selectedKeys).filter(function(key) { return !!favoriteState.selectedKeys[key]; });
+        }
+
+        function syncVisibleCheckboxesFromState() {
+            var list = $('favorites-list');
+            if (!list) return;
+            var checkboxes = list.querySelectorAll('.favorite-checkbox');
+            Array.prototype.forEach.call(checkboxes, function(cb) {
+                var key = cb.getAttribute('data-item-key') || '';
+                cb.checked = !!favoriteState.selectedKeys[key];
+            });
+        }
+
+        function updateToolbarState() {
+            var selectedCount = getSelectedItemKeys().length;
+            var canEditTag = favoriteState.filterType === 'tag' && !!favoriteState.tagId;
+            $('btn-remove-tag').disabled = !canEditTag || selectedCount === 0;
+            $('btn-clear-tag').disabled = selectedCount === 0;
+            $('btn-batch-import').disabled = selectedCount === 0;
+        }
+
+        function renderFavoritesList() {
+            var filtered = filterFavorites();
+            var log = $('favorites-log');
+            var list = $('favorites-list');
+            if (filtered.length === 0) {
+                list.style.display = 'none';
+                list.innerHTML = '';
+                log.style.display = 'block';
+                log.textContent = T('favorites_empty');
+                updateToolbarState();
+                return;
+            }
+            log.style.display = 'none';
+            list.style.display = 'block';
+
+            var html = filtered.map(function(entry) {
+                var d = entry.snapshot || {};
+                var creators = Array.isArray(d.creators) ? d.creators : [];
+                var firstCreator = creators.length ? creators[0] : null;
+                var author = (firstCreator && (firstCreator.lastName || firstCreator.name)) || T('unknown');
+                var selected = !!favoriteState.selectedKeys[String(entry.itemKey || '')];
+                var checked = selected ? 'checked' : '';
+                var createUrl = buildCreateNoteUrl(entry);
+                var tags = Array.isArray(entry.tags) ? entry.tags : [];
+                var tagsHtml = tags.length ? tags.map(function(tag) { return '<span class="tag">' + escapeHtml(tag) + '</span>'; }).join('') : '';
+                var itemKey = escapeHtml(String(entry.itemKey || ''));
+                return '<div class="list-item favorite-list-item" draggable="true" data-item-key="' + itemKey + '">'
+                    + '<div class="favorite-check-wrap"><input type="checkbox" class="favorite-checkbox" data-item-key="' + itemKey + '" ' + checked + '></div>'
+                    + '<div class="list-item-body">'
+                    + '<div class="list-title-row">'
+                    + '<button class="favorite-btn active" data-item-key="' + itemKey + '" title="' + escapeHtml(T('favorite_remove')) + '">★</button>'
+                    + '<div class="list-title">' + escapeHtml(d.title || T('Untitled')) + '</div>'
+                    + '</div>'
+                    + '<div class="meta-row"><span>' + escapeHtml(author) + '</span><span>' + escapeHtml(d.date || '') + '</span><span class="item-type-tag">' + escapeHtml(d.itemType || '') + '</span>' + tagsHtml + '</div>'
+                    + '</div>'
+                    + '<div class="list-item-actions">'
+                    + '<a href="' + createUrl + '" class="add-to-mn-btn" title="' + escapeHtml(T('add_to_mn')) + '">+</a>'
+                    + '</div>'
+                    + '</div>';
+            }).join('');
+
+            list.innerHTML = html;
+            hydrateAllActionButtons(filtered);
+            updateToolbarState();
+        }
+
+        function layoutActionButtons(actionContainer) {
+            if (!actionContainer) return;
+            var listItem = actionContainer.closest('.list-item');
+            var buttons = Array.prototype.filter.call(actionContainer.children, function(el) {
+                if (!el || !el.classList) return false;
+                if (el.style && el.style.display === 'none') return false;
+                return el.classList.contains('add-to-mn-btn') || el.classList.contains('open-in-mn-btn') || el.classList.contains('import-annotations-btn');
+            });
+            var count = buttons.length;
+            if (!count) return;
+            var panelWidth = listItem ? listItem.clientWidth : 0;
+            var maxPanelWidth = Math.floor(panelWidth / 3);
+            var cols = 1;
+            var widthForCols = function(c) { return 36 * c + 6 * Math.max(0, c - 1); };
+            if (count === 2 && widthForCols(2) <= maxPanelWidth) cols = 2;
+            if (count === 3 && widthForCols(3) <= maxPanelWidth) cols = 3;
+            if (count === 4 && widthForCols(2) <= maxPanelWidth) cols = 2;
+            actionContainer.style.width = widthForCols(cols) + 'px';
+        }
+
+        function insertActionButtonsBeforeAdd(actionContainer, html) {
+            var addBtn = actionContainer.querySelector('.add-to-mn-btn:not(.download-pdf-btn)');
+            if (addBtn) addBtn.insertAdjacentHTML('beforebegin', html);
+            else actionContainer.insertAdjacentHTML('beforeend', html);
+        }
+
+        async function hydrateAllActionButtons(filtered) {
+            for (var i = 0; i < filtered.length; i++) {
+                var entry = filtered[i];
+                var key = String(entry.itemKey || '');
+                var row = document.querySelector('.favorite-list-item[data-item-key="' + key + '"]');
+                if (!row) continue;
+                var actionContainer = row.querySelector('.list-item-actions');
+                layoutActionButtons(actionContainer);
+                hydrateFavoriteAttachments(entry, actionContainer);
+            }
+        }
+
+        async function hydrateFavoriteAttachments(entry, actionContainer) {
+            var d = entry.snapshot || {};
+            if (!entry.itemKey) return;
+            var uid = entry.uid || ((window.__mnConfig && window.__mnConfig.uid) || '0');
+            var apiKey = entry.apiKey || ((window.__mnConfig && window.__mnConfig.key) || '');
+            var base = '/users/' + uid;
+            try {
+                var rKids = await smartFetch(base + '/items/' + entry.itemKey + '/children', { forceCloud: true });
+                if (!rKids.ok) return;
+                var kids = await rKids.json();
+                var pdfItem = kids.find(function(k) { return k.data && k.data.itemType === 'attachment' && (k.data.contentType === 'application/pdf' || (k.data.filename || '').endsWith('.pdf')); });
+                if (!pdfItem) {
+                    entry.hasPdf = false;
+                    entry.hasPdfAnnotations = false;
+                    entry.attachmentKey = '';
+                    persistFavoriteEntry(entry);
+                    return;
+                }
+
+                var attachmentKey = String(pdfItem.data.key || '');
+                var pdfFilename = String(pdfItem.data.filename || d.title || T('Untitled'));
+                var safeKey = String(apiKey || '').replace(/"/g, '&quot;');
+                var dlBtnHtml = '<a href="#" class="add-to-mn-btn download-pdf-btn" title="' + T('download_pdf') + '" data-uid="' + escapeHtml(uid) + '" data-attachment-key="' + escapeHtml(attachmentKey) + '" data-file-name="' + escapeHtml(pdfFilename) + '" data-api-key="' + safeKey + '">' + buildDownloadPdfIcon() + '</a>';
+                var eyeBtnHtml = '<button class="open-in-mn-btn loading" data-item-key="' + escapeHtml(String(entry.itemKey)) + '" data-attachment-key="' + escapeHtml(attachmentKey) + '" title="Open in MarginNote"></button>';
+                insertActionButtonsBeforeAdd(actionContainer, dlBtnHtml + eyeBtnHtml);
+                layoutActionButtons(actionContainer);
+
+                var eyePayload = {};
+                eyePayload[attachmentKey] = pdfFilename;
+                sendMNProtocol('mnzotero://checkDocuments?payload=' + encodeURIComponent(JSON.stringify(eyePayload)));
+
+                var rAnnos = await smartFetch(base + '/items/' + attachmentKey + '/children?itemType=annotation&limit=1', { forceCloud: true });
+                var hasAnno = false;
+                if (rAnnos.ok) {
+                    var annos = await rAnnos.json();
+                    if (annos && annos.length > 0) {
+                        hasAnno = true;
+                        var importUrl = 'mnzotero://importAnnotations?parentKey=' + encodeURIComponent(entry.itemKey) + '&attachmentKey=' + encodeURIComponent(attachmentKey) + '&uid=' + encodeURIComponent(uid) + '&key=' + encodeURIComponent(apiKey || '');
+                        var importBtnHtml = '<a href="' + importUrl + '" class="import-annotations-btn" title="' + T('import_annotations') + '">' + buildImportAnnotationsIcon() + '</a>';
+                        insertActionButtonsBeforeAdd(actionContainer, importBtnHtml);
+                        layoutActionButtons(actionContainer);
+                    }
+                }
+
+                entry.hasPdf = true;
+                entry.hasPdfAnnotations = hasAnno;
+                entry.attachmentKey = attachmentKey;
+                entry.pdfFilename = pdfFilename;
+                persistFavoriteEntry(entry);
+            } catch (e) {
+                console.log('hydrate favorite attachments failed: ' + e);
+            }
+        }
+
+        function openTagEditModal(tagId) {
+            var targetTag = tagId ? String(tagId) : String(favoriteState.tagId || '');
+            if (!targetTag) {
+                setStatus(T('select_tag_first'), 'error');
+                return;
+            }
+            tagModalMode = 'edit';
+            $('tag-edit-title').textContent = T('edit_tag');
+            $('btn-tag-delete').style.display = 'inline-block';
+            favoriteState.filterType = 'tag';
+            favoriteState.tagId = targetTag;
+            $('tag-edit-input').value = targetTag;
+            $('tag-edit-modal').style.display = 'block';
+            $('tag-edit-modal').classList.add('show');
+        }
+
+        function openTagCreateModal() {
+            tagModalMode = 'create';
+            $('tag-edit-title').textContent = T('new_tag');
+            $('btn-tag-delete').style.display = 'none';
+            $('tag-edit-input').value = '';
+            $('tag-edit-modal').style.display = 'block';
+            $('tag-edit-modal').classList.add('show');
+        }
+
+        function closeTagEditModal() {
+            $('tag-edit-modal').classList.remove('show');
+            $('tag-edit-modal').style.display = 'none';
+        }
+
+        function selectAllFiltered() {
+            var filtered = filterFavorites();
+            filtered.forEach(function(entry) {
+                favoriteState.selectedKeys[String(entry.itemKey || '')] = true;
+            });
+            syncVisibleCheckboxesFromState();
+            updateToolbarState();
+        }
+
+        function invertSelectionFiltered() {
+            var filtered = filterFavorites();
+            filtered.forEach(function(entry) {
+                var key = String(entry.itemKey || '');
+                favoriteState.selectedKeys[key] = !favoriteState.selectedKeys[key];
+            });
+            syncVisibleCheckboxesFromState();
+            updateToolbarState();
+        }
+
+        function applyTagToKeys(tagId, keys) {
+            if (!tagId || !keys.length) return;
+            sendMNProtocol('mnzotero://favoritesTag?action=apply&tagId=' + encodeURIComponent(tagId) + '&itemKeys=' + encodeURIComponent(JSON.stringify(keys)));
+            keys.forEach(function(key) {
+                var entry = findFavoriteByItemKey(key);
+                if (!entry) return;
+                if (!Array.isArray(entry.tags)) entry.tags = [];
+                if (entry.tags.indexOf(tagId) === -1) entry.tags.push(tagId);
+                persistFavoriteEntry(entry);
+            });
+            if (favoriteState.tags.indexOf(tagId) === -1) favoriteState.tags.push(tagId);
+            renderTagSidebar();
+            renderFavoritesList();
+        }
+
+        function getAllVisibleItemKeys() {
+            return filterFavorites().map(function(entry) {
+                return String(entry.itemKey || '');
+            }).filter(Boolean);
+        }
+
+        function getTouchDragKeysByRow(row) {
+            var keys = getAllVisibleItemKeys();
+            if (keys.length > 0) return keys;
+            if (!row) return [];
+            var rowKey = row.getAttribute('data-item-key') || '';
+            return rowKey ? [rowKey] : [];
+        }
+
+        function cleanupTouchDrag() {
+            if (!touchDragState) return;
+            if (touchDragState.currentTagEl) {
+                touchDragState.currentTagEl.classList.remove('drag-over');
+            }
+            if (touchDragState.ghost && touchDragState.ghost.parentNode) {
+                touchDragState.ghost.parentNode.removeChild(touchDragState.ghost);
+            }
+            touchDragState = null;
+        }
+
+        function ensureTouchGhost(keys, x, y) {
+            var ghost = document.createElement('div');
+            ghost.className = 'touch-drag-ghost';
+            ghost.textContent = ('全部' + keys.length + '条文献');
+            document.body.appendChild(ghost);
+            ghost.style.left = (x + 10) + 'px';
+            ghost.style.top = (y + 10) + 'px';
+            return ghost;
+        }
+
+        function createDesktopDragPreview(keys) {
+            var el = document.createElement('div');
+            el.className = 'desktop-drag-preview';
+            el.textContent = ('全部' + keys.length + '条文献');
+            document.body.appendChild(el);
+            return el;
+        }
+
+        function updateTouchDragTarget(x, y) {
+            if (!touchDragState || !touchDragState.ghost) return;
+            touchDragState.ghost.style.left = (x + 10) + 'px';
+            touchDragState.ghost.style.top = (y + 10) + 'px';
+            var target = document.elementFromPoint(x, y);
+            var tagNode = target ? target.closest('.favorite-tag-item.tag-node') : null;
+            if (touchDragState.currentTagEl && touchDragState.currentTagEl !== tagNode) {
+                touchDragState.currentTagEl.classList.remove('drag-over');
+            }
+            if (tagNode) tagNode.classList.add('drag-over');
+            touchDragState.currentTagEl = tagNode;
+        }
+
+        function removeCurrentTagFromSelected() {
+            if (favoriteState.filterType !== 'tag' || !favoriteState.tagId) {
+                setStatus(T('select_tag_first'), 'error');
+                return;
+            }
+            var keys = getSelectedItemKeys();
+            if (!keys.length) return;
+            sendMNProtocol('mnzotero://favoritesTag?action=remove&tagId=' + encodeURIComponent(favoriteState.tagId) + '&itemKeys=' + encodeURIComponent(JSON.stringify(keys)));
+            keys.forEach(function(key) {
+                var entry = findFavoriteByItemKey(key);
+                if (!entry || !Array.isArray(entry.tags)) return;
+                entry.tags = entry.tags.filter(function(tag) { return tag !== favoriteState.tagId; });
+                persistFavoriteEntry(entry);
+            });
+            renderFavoritesList();
+        }
+
+        function clearTagsFromSelected() {
+            var keys = getSelectedItemKeys();
+            if (!keys.length) return;
+            sendMNProtocol('mnzotero://favoritesTag?action=clear&itemKeys=' + encodeURIComponent(JSON.stringify(keys)));
+            keys.forEach(function(key) {
+                var entry = findFavoriteByItemKey(key);
+                if (!entry) return;
+                entry.tags = [];
+                persistFavoriteEntry(entry);
+            });
+            renderFavoritesList();
+        }
+
+        function syncBatchOptionState() {
+            favoriteState.batch.card = !!$('opt-import-card').checked;
+            favoriteState.batch.pdf = !!$('opt-import-pdf').checked;
+            if (!favoriteState.batch.card) {
+                $('opt-import-annotation').checked = false;
+                $('opt-import-annotation').disabled = true;
+                favoriteState.batch.annotation = false;
+            } else {
+                $('opt-import-annotation').disabled = false;
+                favoriteState.batch.annotation = !!$('opt-import-annotation').checked;
+            }
+        }
+
+        function runBatchImport() {
+            var keys = getSelectedItemKeys();
+            if (!keys.length) return;
+            syncBatchOptionState();
+            var items = keys.map(function(key) {
+                var entry = findFavoriteByItemKey(key);
+                if (!entry) return null;
+                var clone = JSON.parse(JSON.stringify(entry));
+                var createUrl = buildCreateNoteUrl(entry);
+                clone.createNoteQuery = createUrl.indexOf('?') > -1 ? createUrl.split('?')[1] : '';
+                return clone;
+            }).filter(Boolean);
+            var payload = { options: favoriteState.batch, items: items };
+            sendMNProtocol('mnzotero://favorites?action=batchImport&payload=' + encodeURIComponent(JSON.stringify(payload)));
+        }
+
+        async function refreshFavoritesSnapshot(options) {
+            var opts = options || {};
+            var silent = !!opts.silent;
+            if (!silent) setStatus(T('favorites_loading'), '');
+            var updates = [];
+            for (var i = 0; i < favoriteState.items.length; i++) {
+                var entry = favoriteState.items[i];
+                var key = String(entry.itemKey || '');
+                if (!key) continue;
+                var uid = entry.uid || ((window.__mnConfig && window.__mnConfig.uid) || '0');
+                var base = '/users/' + uid;
+                try {
+                    var itemRes = await smartFetch(base + '/items/' + key, { forceCloud: true });
+                    if (!itemRes.ok) continue;
+                    var itemJson = await itemRes.json();
+                    var snapshot = itemJson && itemJson.data ? itemJson.data : entry.snapshot;
+                    var next = JSON.parse(JSON.stringify(entry));
+                    next.snapshot = snapshot;
+                    updates.push(next);
+                } catch (e) {
+                    console.log('refresh favorite failed: ' + key + ' ' + e);
+                }
+            }
+            if (updates.length) {
+                persistFavoriteEntries(updates);
+                await requestFavoritesList();
+            }
+            if (!silent) setStatus('', '');
+        }
+
+        function initText() {
+            function setImportLabelText(labelId, text) {
+                var label = $(labelId);
+                if (!label) return;
+                var input = label.querySelector('input');
+                if (!input) return;
+                while (label.childNodes.length > 1) label.removeChild(label.lastChild);
+                label.appendChild(document.createTextNode(text));
+            }
+            var viewOptions = document.querySelectorAll('.view-option');
+            var values = [T('library'), T('favorites'), T('selected_cards'), T('settings')];
+            viewOptions.forEach(function(opt, idx) {
+                if (idx < values.length) opt.textContent = values[idx];
+            });
+            var sidebarHeader = document.querySelector('#favorites-sidebar .sidebar-header');
+            if (sidebarHeader) sidebarHeader.textContent = T('field_tags');
+            $('btn-select-all').textContent = T('select_all');
+            $('btn-invert').textContent = T('invert_selection');
+            $('btn-batch-import').textContent = T('batch_import');
+            $('btn-remove-tag').textContent = T('remove_tag');
+            $('btn-clear-tag').textContent = T('clear_tag');
+            $('btn-refresh-favorites').textContent = T('refresh_favorites');
+            setImportLabelText('label-import-card', T('selected_cards'));
+            setImportLabelText('label-import-pdf', 'PDF');
+            setImportLabelText('label-import-annotation', T('import_annotations'));
+            $('btn-tag-save').textContent = T('confirm');
+            $('btn-tag-cancel').textContent = T('cancel');
+            $('btn-tag-delete').textContent = T('delete');
+            $('favorites-log').textContent = T('favorites_loading');
+            $('btn-new-tag').title = T('new_tag');
+        }
+
+        function bindEvents() {
+            document.querySelectorAll('.view-option[data-view]').forEach(function(el) {
+                el.addEventListener('click', function() {
+                    var view = this.getAttribute('data-view');
+                    if (view === 'library') window.location.href = 'library.html';
+                    else if (view === 'favorites') return;
+                    else if (view === 'selected') window.location.href = 'selection.html';
+                    else if (view === 'settings') window.location.href = 'settings.html';
+                });
+            });
+
+            $('favorites-tag-tree').addEventListener('click', function(event) {
+                var editBtn = event.target.closest('.tag-edit-btn');
+                if (editBtn) {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    var editTagId = editBtn.getAttribute('data-tag-id') || '';
+                    openTagEditModal(editTagId);
+                    return;
+                }
+                var item = event.target.closest('.favorite-tag-item');
+                if (!item) return;
+                var type = item.getAttribute('data-filter-type') || 'all';
+                var tagId = item.getAttribute('data-tag-id') || '';
+                favoriteState.filterType = type;
+                favoriteState.tagId = type === 'tag' ? tagId : '';
+                renderTagSidebar();
+                renderFavoritesList();
+            });
+
+            $('favorites-tag-tree').addEventListener('dragover', function(event) {
+                var target = event.target.closest('.favorite-tag-item.tag-node');
+                if (!target) return;
+                event.preventDefault();
+                target.classList.add('drag-over');
+            });
+
+            $('favorites-tag-tree').addEventListener('dragleave', function(event) {
+                var target = event.target.closest('.favorite-tag-item.tag-node');
+                if (!target) return;
+                target.classList.remove('drag-over');
+            });
+
+            $('favorites-tag-tree').addEventListener('drop', function(event) {
+                var target = event.target.closest('.favorite-tag-item.tag-node');
+                if (!target) return;
+                event.preventDefault();
+                target.classList.remove('drag-over');
+                var tagId = target.getAttribute('data-tag-id') || '';
+                var raw = event.dataTransfer ? event.dataTransfer.getData('text/plain') : '[]';
+                var keys = [];
+                try { keys = JSON.parse(raw); } catch (e) { keys = []; }
+                if (!Array.isArray(keys)) keys = [];
+                applyTagToKeys(tagId, keys);
+            });
+
+            $('favorites-list').addEventListener('change', function(event) {
+                var cb = event.target.closest('.favorite-checkbox');
+                if (!cb) return;
+                var key = cb.getAttribute('data-item-key') || '';
+                if (!key) return;
+                favoriteState.selectedKeys[key] = !!cb.checked;
+                updateToolbarState();
+            });
+
+            $('favorites-list').addEventListener('click', function(event) {
+                var favoriteBtn = event.target.closest('.favorite-btn');
+                if (favoriteBtn) {
+                    event.preventDefault();
+                    var itemKey = favoriteBtn.getAttribute('data-item-key') || '';
+                    var entry = findFavoriteByItemKey(itemKey);
+                    if (!entry) return;
+                    sendMNProtocol('mnzotero://favorites?action=toggle&payload=' + encodeURIComponent(JSON.stringify(entry)));
+                    favoriteState.items = favoriteState.items.filter(function(item) { return String(item.itemKey || '') !== itemKey; });
+                    delete favoriteState.selectedKeys[itemKey];
+                    renderFavoritesList();
+                    renderTagSidebar();
+                    return;
+                }
+
+                var downloadBtn = event.target.closest('.download-pdf-btn');
+                if (downloadBtn) {
+                    event.preventDefault();
+                    if (downloadBtn.classList.contains('is-downloading')) return;
+                    var uid = downloadBtn.getAttribute('data-uid') || '';
+                    var attachmentKey = downloadBtn.getAttribute('data-attachment-key') || '';
+                    var fileName = downloadBtn.getAttribute('data-file-name') || 'Untitled';
+                    var apiKey = downloadBtn.getAttribute('data-api-key') || '';
+                    if (!uid || !attachmentKey) return;
+                    var requestId = createMNRequestId();
+                    var motion = startDownloadButtonMotion(downloadBtn);
+                    __mnDownloadPending[requestId] = { button: downloadBtn, motion: motion };
+                    setTimeout(function () {
+                        var stale = __mnDownloadPending[requestId];
+                        if (!stale) return;
+                        delete __mnDownloadPending[requestId];
+                        finishDownloadButtonMotion(stale.button, stale.motion, false);
+                    }, 45000);
+                    var query = [
+                        'uid=' + encodeURIComponent(uid),
+                        'attachmentKey=' + encodeURIComponent(attachmentKey),
+                        'fileName=' + encodeURIComponent(fileName),
+                        'requestId=' + encodeURIComponent(requestId)
+                    ];
+                    if (apiKey) query.push('key=' + encodeURIComponent(apiKey));
+                    sendMNProtocol('mnzotero://downloadPdf?' + query.join('&'));
+                    return;
+                }
+
+                var eyeBtn = event.target.closest('.open-in-mn-btn');
+                if (eyeBtn && !eyeBtn.classList.contains('loading')) {
+                    event.preventDefault();
+                    var docMd5 = eyeBtn.dataset.docMd5;
+                    if (docMd5) sendMNProtocol('mnzotero://openDocument?docMd5=' + encodeURIComponent(docMd5));
+                }
+            });
+
+            $('favorites-list').addEventListener('dragstart', function(event) {
+                var row = event.target.closest('.favorite-list-item');
+                if (!row) return;
+                var keys = getAllVisibleItemKeys();
+                if (!keys.length) {
+                    var rowKey = row.getAttribute('data-item-key') || '';
+                    if (rowKey) keys = [rowKey];
+                }
+                if (!keys.length) return;
+                if (event.dataTransfer) {
+                    event.dataTransfer.setData('text/plain', JSON.stringify(keys));
+                    var preview = createDesktopDragPreview(keys);
+                    event.dataTransfer.setDragImage(preview, 16, 16);
+                    setTimeout(function() {
+                        if (preview && preview.parentNode) preview.parentNode.removeChild(preview);
+                    }, 0);
+                }
+            });
+
+            $('favorites-list').addEventListener('touchstart', function(event) {
+                if (!event.touches || event.touches.length !== 1) return;
+                var target = event.target;
+                if (target.closest('input,button,a,label')) return;
+                var row = target.closest('.favorite-list-item');
+                if (!row) return;
+                var touch = event.touches[0];
+                touchDragState = {
+                    row: row,
+                    keys: getTouchDragKeysByRow(row),
+                    startX: touch.clientX,
+                    startY: touch.clientY,
+                    dragging: false,
+                    ghost: null,
+                    currentTagEl: null
+                };
+            }, { passive: true });
+
+            $('favorites-list').addEventListener('touchmove', function(event) {
+                if (!touchDragState || !event.touches || event.touches.length !== 1) return;
+                var touch = event.touches[0];
+                var dx = touch.clientX - touchDragState.startX;
+                var dy = touch.clientY - touchDragState.startY;
+                if (!touchDragState.dragging) {
+                    if (Math.sqrt(dx * dx + dy * dy) < 10) return;
+                    touchDragState.dragging = true;
+                    touchDragState.ghost = ensureTouchGhost(touchDragState.keys, touch.clientX, touch.clientY);
+                }
+                event.preventDefault();
+                updateTouchDragTarget(touch.clientX, touch.clientY);
+            }, { passive: false });
+
+            $('favorites-list').addEventListener('touchend', function() {
+                if (!touchDragState) return;
+                if (touchDragState.dragging && touchDragState.currentTagEl) {
+                    var tagId = touchDragState.currentTagEl.getAttribute('data-tag-id') || '';
+                    if (tagId) applyTagToKeys(tagId, touchDragState.keys);
+                }
+                cleanupTouchDrag();
+            }, { passive: true });
+
+            $('favorites-list').addEventListener('touchcancel', function() {
+                cleanupTouchDrag();
+            }, { passive: true });
+
+            $('btn-select-all').addEventListener('click', selectAllFiltered);
+            $('btn-invert').addEventListener('click', invertSelectionFiltered);
+            $('btn-remove-tag').addEventListener('click', removeCurrentTagFromSelected);
+            $('btn-clear-tag').addEventListener('click', clearTagsFromSelected);
+            $('btn-refresh-favorites').addEventListener('click', refreshFavoritesSnapshot);
+            $('btn-batch-import').addEventListener('click', runBatchImport);
+
+            $('btn-batch-options').addEventListener('click', function() {
+                $('batch-options-menu').classList.toggle('hidden');
+            });
+
+            $('opt-import-card').addEventListener('change', syncBatchOptionState);
+            $('opt-import-pdf').addEventListener('change', syncBatchOptionState);
+            $('opt-import-annotation').addEventListener('change', syncBatchOptionState);
+
+            $('btn-new-tag').addEventListener('click', openTagCreateModal);
+
+            $('btn-tag-cancel').addEventListener('click', closeTagEditModal);
+            $('btn-tag-save').addEventListener('click', function() {
+                var nextName = String($('tag-edit-input').value || '').trim();
+                if (!nextName) {
+                    setStatus(T('tag_name_required'), 'error');
+                    return;
+                }
+                if (tagModalMode === 'create') {
+                    sendMNProtocol('mnzotero://favoritesTag?action=create&tagId=' + encodeURIComponent(nextName));
+                    if (favoriteState.tags.indexOf(nextName) === -1) favoriteState.tags.push(nextName);
+                    favoriteState.tags.sort();
+                } else {
+                    var current = favoriteState.tagId;
+                    sendMNProtocol('mnzotero://favoritesTag?action=rename&tagId=' + encodeURIComponent(current) + '&newName=' + encodeURIComponent(nextName));
+                    favoriteState.items.forEach(function(entry) {
+                        if (!Array.isArray(entry.tags)) return;
+                        entry.tags = entry.tags.map(function(tag) { return tag === current ? nextName : tag; });
+                        persistFavoriteEntry(entry);
+                    });
+                    favoriteState.tags = favoriteState.tags.map(function(tag) { return tag === current ? nextName : tag; });
+                    favoriteState.tagId = nextName;
+                }
+                closeTagEditModal();
+                renderTagSidebar();
+                renderFavoritesList();
+            });
+
+            $('btn-tag-delete').addEventListener('click', function() {
+                var current = favoriteState.tagId;
+                if (!current) return;
+                sendMNProtocol('mnzotero://favoritesTag?action=delete&tagId=' + encodeURIComponent(current));
+                favoriteState.items.forEach(function(entry) {
+                    if (!Array.isArray(entry.tags)) return;
+                    entry.tags = entry.tags.filter(function(tag) { return tag !== current; });
+                    persistFavoriteEntry(entry);
+                });
+                favoriteState.tags = favoriteState.tags.filter(function(tag) { return tag !== current; });
+                favoriteState.filterType = 'all';
+                favoriteState.tagId = '';
+                closeTagEditModal();
+                renderTagSidebar();
+                renderFavoritesList();
+            });
+
+            document.addEventListener('click', function(event) {
+                if (!event.target.closest('.batch-import-group')) {
+                    $('batch-options-menu').classList.add('hidden');
+                }
+            });
+        }
+
+        async function initPage() {
+            initText();
+            bindEvents();
+            syncBatchOptionState();
+            await requestFavoritesList();
+            renderTagSidebar();
+            renderFavoritesList();
+            setStatus('', '');
+            if (favoriteState.items.length > 0) {
+                refreshFavoritesSnapshot({ silent: true });
+            }
+        }
+
+        initPage();
+    </script>
+</body>
+
+</html>
