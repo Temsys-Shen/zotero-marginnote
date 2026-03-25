@@ -339,6 +339,22 @@
             $('btn-batch-import').disabled = selectedCount === 0;
         }
 
+        function handleListEmptyState() {
+            var list = $('favorites-list');
+            var log = $('favorites-log');
+            if (!list || !log) return;
+            var hasRow = !!list.querySelector('.favorite-list-item');
+            if (hasRow) {
+                list.style.display = 'block';
+                log.style.display = 'none';
+                return;
+            }
+            list.style.display = 'none';
+            list.innerHTML = '';
+            log.style.display = 'block';
+            log.textContent = T('favorites_empty');
+        }
+
         function renderFavoritesList() {
             var filtered = filterFavorites();
             var log = $('favorites-log');
@@ -541,14 +557,8 @@
             renderFavoritesList();
         }
 
-        function getAllVisibleItemKeys() {
-            return filterFavorites().map(function(entry) {
-                return String(entry.itemKey || '');
-            }).filter(Boolean);
-        }
-
-        function getTouchDragKeysByRow(row) {
-            var keys = getAllVisibleItemKeys();
+        function getDragItemKeysByRow(row) {
+            var keys = getSelectedItemKeys();
             if (keys.length > 0) return keys;
             if (!row) return [];
             var rowKey = row.getAttribute('data-item-key') || '';
@@ -569,7 +579,7 @@
         function ensureTouchGhost(keys, x, y) {
             var ghost = document.createElement('div');
             ghost.className = 'touch-drag-ghost';
-            ghost.textContent = ('全部' + keys.length + '条文献');
+            ghost.textContent = (keys.length + '条文献');
             document.body.appendChild(ghost);
             ghost.style.left = (x + 10) + 'px';
             ghost.style.top = (y + 10) + 'px';
@@ -579,7 +589,7 @@
         function createDesktopDragPreview(keys) {
             var el = document.createElement('div');
             el.className = 'desktop-drag-preview';
-            el.textContent = ('全部' + keys.length + '条文献');
+            el.textContent = (keys.length + '条文献');
             document.body.appendChild(el);
             return el;
         }
@@ -793,7 +803,10 @@
                     sendMNProtocol('mnzotero://favorites?action=toggle&payload=' + encodeURIComponent(JSON.stringify(entry)));
                     favoriteState.items = favoriteState.items.filter(function(item) { return String(item.itemKey || '') !== itemKey; });
                     delete favoriteState.selectedKeys[itemKey];
-                    renderFavoritesList();
+                    var row = favoriteBtn.closest('.favorite-list-item');
+                    if (row && row.parentNode) row.parentNode.removeChild(row);
+                    handleListEmptyState();
+                    updateToolbarState();
                     renderTagSidebar();
                     return;
                 }
@@ -838,11 +851,7 @@
             $('favorites-list').addEventListener('dragstart', function(event) {
                 var row = event.target.closest('.favorite-list-item');
                 if (!row) return;
-                var keys = getAllVisibleItemKeys();
-                if (!keys.length) {
-                    var rowKey = row.getAttribute('data-item-key') || '';
-                    if (rowKey) keys = [rowKey];
-                }
+                var keys = getDragItemKeysByRow(row);
                 if (!keys.length) return;
                 if (event.dataTransfer) {
                     event.dataTransfer.setData('text/plain', JSON.stringify(keys));
@@ -863,7 +872,7 @@
                 var touch = event.touches[0];
                 touchDragState = {
                     row: row,
-                    keys: getTouchDragKeysByRow(row),
+                    keys: getDragItemKeysByRow(row),
                     startX: touch.clientX,
                     startY: touch.clientY,
                     dragging: false,

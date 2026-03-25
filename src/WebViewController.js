@@ -567,7 +567,6 @@ var SZZoteroBridge = class {
       else state.items.unshift(entry);
       SZZoteroBridge._mergeTagsFromItems(state);
       SZZoteroBridge._saveFavoritesState(state);
-      SZZoteroBridge._emitFavoritesState(self.webView, state);
       return;
     }
 
