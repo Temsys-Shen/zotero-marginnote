@@ -232,6 +232,8 @@ function upd() {
             var view = this.getAttribute('data-view');
             if (view === 'library') {
                 // Already on library page
+            } else if (view === 'favorites') {
+                window.location.href = 'favorites.html';
             } else if (view === 'selected') {
                 window.location.href = 'selection.html';
             } else if (view === 'settings') {

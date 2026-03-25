@@ -406,6 +406,18 @@ var SZZoteroBridge = class {
       return false;
     }
 
+    if (host === 'favoritesTag' || path.indexOf('favoritesTag') !== -1) {
+      const queryString = SZZoteroBridge._getQueryString(url, urlString);
+      SZZoteroBridge._handleFavoritesTag(self, queryString);
+      return false;
+    }
+
+    if (host === 'favorites' || path.indexOf('favorites') !== -1) {
+      const queryString = SZZoteroBridge._getQueryString(url, urlString);
+      SZZoteroBridge._handleFavorites(self, queryString);
+      return false;
+    }
+
     return true;
   }
 
@@ -436,6 +448,335 @@ var SZZoteroBridge = class {
       params[k] = v;
     }
     return params;
+  }
+
+  static _favoritesStorageKey() {
+    return 'mn_zotero_favorites_state_v1';
+  }
+
+  static _loadFavoritesState() {
+    const defaults = NSUserDefaults.standardUserDefaults();
+    const raw = defaults.objectForKey(SZZoteroBridge._favoritesStorageKey());
+    if (!raw) return { items: [], tags: [] };
+    let parsed = raw;
+    if (typeof parsed === 'string') {
+      try {
+        parsed = JSON.parse(parsed);
+      } catch (e) {
+        return { items: [], tags: [] };
+      }
+    }
+    if (!parsed || typeof parsed !== 'object') return { items: [], tags: [] };
+    return {
+      items: Array.isArray(parsed.items) ? parsed.items : [],
+      tags: Array.isArray(parsed.tags) ? parsed.tags : []
+    };
+  }
+
+  static _saveFavoritesState(state) {
+    const normalized = {
+      items: Array.isArray(state && state.items) ? state.items : [],
+      tags: Array.isArray(state && state.tags) ? state.tags : []
+    };
+    NSUserDefaults.standardUserDefaults().setObjectForKey(JSON.stringify(normalized), SZZoteroBridge._favoritesStorageKey());
+  }
+
+  static _emitFavoritesState(webView, state) {
+    if (!webView) return;
+    const payload = JSON.stringify({
+      items: Array.isArray(state && state.items) ? state.items : [],
+      tags: Array.isArray(state && state.tags) ? state.tags : []
+    });
+    const esc = payload.replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/\r/g, '').replace(/\n/g, '\\n');
+    webView.evaluateJavaScript(`(function(){ try { window.__mnFavoritesPayload = JSON.parse('${esc}'); } catch (_) { window.__mnFavoritesPayload = {items:[],tags:[]}; } if (window.onMNFavoritesList) window.onMNFavoritesList(); })();`, null);
+  }
+
+  static _decodeJsonParam(raw, fallback) {
+    if (!raw) return fallback;
+    try {
+      return JSON.parse(String(raw));
+    } catch (e) {
+      return fallback;
+    }
+  }
+
+  static _normalizeFavoriteEntry(entry) {
+    if (!entry || typeof entry !== 'object') return null;
+    const key = entry.itemKey ? String(entry.itemKey).trim() : '';
+    if (!key) return null;
+    return {
+      itemKey: key,
+      snapshot: (entry.snapshot && typeof entry.snapshot === 'object') ? entry.snapshot : {},
+      tags: Array.isArray(entry.tags) ? entry.tags.map((t) => String(t)) : [],
+      hasPdf: !!entry.hasPdf,
+      hasPdfAnnotations: !!entry.hasPdfAnnotations,
+      attachmentKey: entry.attachmentKey ? String(entry.attachmentKey) : '',
+      pdfFilename: entry.pdfFilename ? String(entry.pdfFilename) : '',
+      docMd5: entry.docMd5 ? String(entry.docMd5) : '',
+      uid: entry.uid ? String(entry.uid) : '',
+      apiKey: entry.apiKey ? String(entry.apiKey) : '',
+      slug: entry.slug ? String(entry.slug) : '',
+      createNoteQuery: entry.createNoteQuery ? String(entry.createNoteQuery) : '',
+      author: entry.author ? String(entry.author) : '',
+      updatedAt: Date.now()
+    };
+  }
+
+  static _mergeTagsFromItems(state) {
+    const tagSet = {};
+    const list = Array.isArray(state && state.items) ? state.items : [];
+    list.forEach((entry) => {
+      const tags = Array.isArray(entry && entry.tags) ? entry.tags : [];
+      tags.forEach((tag) => {
+        const name = String(tag || '').trim();
+        if (name) tagSet[name] = true;
+      });
+    });
+    const fixed = Array.isArray(state && state.tags) ? state.tags : [];
+    fixed.forEach((tag) => {
+      const name = String(tag || '').trim();
+      if (name) tagSet[name] = true;
+    });
+    state.tags = Object.keys(tagSet).sort();
+  }
+
+  static _getFavoriteEntryByKey(state, itemKey) {
+    const key = String(itemKey || '');
+    const list = Array.isArray(state && state.items) ? state.items : [];
+    for (let i = 0; i < list.length; i++) {
+      if (String(list[i].itemKey || '') === key) return { index: i, entry: list[i] };
+    }
+    return { index: -1, entry: null };
+  }
+
+  static _handleFavorites(self, queryString) {
+    const params = SZZoteroBridge._parseQueryString(queryString);
+    const action = params.action ? String(params.action) : 'list';
+    const state = SZZoteroBridge._loadFavoritesState();
+
+    if (action === 'list') {
+      SZZoteroBridge._emitFavoritesState(self.webView, state);
+      return;
+    }
+
+    if (action === 'toggle') {
+      const entry = SZZoteroBridge._normalizeFavoriteEntry(SZZoteroBridge._decodeJsonParam(params.payload, null));
+      if (!entry) return;
+      const found = SZZoteroBridge._getFavoriteEntryByKey(state, entry.itemKey);
+      if (found.index >= 0) state.items.splice(found.index, 1);
+      else state.items.unshift(entry);
+      SZZoteroBridge._mergeTagsFromItems(state);
+      SZZoteroBridge._saveFavoritesState(state);
+      SZZoteroBridge._emitFavoritesState(self.webView, state);
+      return;
+    }
+
+    if (action === 'upsert') {
+      const entry = SZZoteroBridge._normalizeFavoriteEntry(SZZoteroBridge._decodeJsonParam(params.payload, null));
+      if (!entry) return;
+      const found = SZZoteroBridge._getFavoriteEntryByKey(state, entry.itemKey);
+      if (found.index >= 0) state.items[found.index] = Object.assign({}, found.entry, entry);
+      else state.items.unshift(entry);
+      SZZoteroBridge._mergeTagsFromItems(state);
+      SZZoteroBridge._saveFavoritesState(state);
+      return;
+    }
+
+    if (action === 'bulkUpsert') {
+      const list = SZZoteroBridge._decodeJsonParam(params.payload, []);
+      if (!Array.isArray(list)) return;
+      list.forEach((raw) => {
+        const entry = SZZoteroBridge._normalizeFavoriteEntry(raw);
+        if (!entry) return;
+        const found = SZZoteroBridge._getFavoriteEntryByKey(state, entry.itemKey);
+        if (found.index >= 0) state.items[found.index] = Object.assign({}, found.entry, entry);
+        else state.items.unshift(entry);
+      });
+      SZZoteroBridge._mergeTagsFromItems(state);
+      SZZoteroBridge._saveFavoritesState(state);
+      return;
+    }
+
+    if (action === 'batchImport') {
+      const payload = SZZoteroBridge._decodeJsonParam(params.payload, {});
+      SZZoteroBridge._handleFavoritesBatchImport(self, payload);
+      return;
+    }
+  }
+
+  static _handleFavoritesTag(self, queryString) {
+    const params = SZZoteroBridge._parseQueryString(queryString);
+    const action = params.action ? String(params.action) : '';
+    const tagId = params.tagId ? String(params.tagId).trim() : '';
+    const newName = params.newName ? String(params.newName).trim() : '';
+    const itemKeys = SZZoteroBridge._decodeJsonParam(params.itemKeys, []);
+    const keys = Array.isArray(itemKeys) ? itemKeys.map((k) => String(k)) : [];
+    const state = SZZoteroBridge._loadFavoritesState();
+
+    if (action === 'create') {
+      if (!tagId) return;
+      if (state.tags.indexOf(tagId) === -1) state.tags.push(tagId);
+    } else if (action === 'rename') {
+      if (!tagId || !newName) return;
+      state.tags = state.tags.map((tag) => (tag === tagId ? newName : tag));
+      state.items.forEach((entry) => {
+        if (!Array.isArray(entry.tags)) return;
+        entry.tags = entry.tags.map((tag) => (tag === tagId ? newName : tag));
+      });
+    } else if (action === 'delete') {
+      if (!tagId) return;
+      state.tags = state.tags.filter((tag) => tag !== tagId);
+      state.items.forEach((entry) => {
+        if (!Array.isArray(entry.tags)) return;
+        entry.tags = entry.tags.filter((tag) => tag !== tagId);
+      });
+    } else if (action === 'apply') {
+      if (!tagId || keys.length === 0) return;
+      if (state.tags.indexOf(tagId) === -1) state.tags.push(tagId);
+      keys.forEach((key) => {
+        const found = SZZoteroBridge._getFavoriteEntryByKey(state, key);
+        if (!found.entry) return;
+        if (!Array.isArray(found.entry.tags)) found.entry.tags = [];
+        if (found.entry.tags.indexOf(tagId) === -1) found.entry.tags.push(tagId);
+      });
+    } else if (action === 'remove') {
+      if (!tagId || keys.length === 0) return;
+      keys.forEach((key) => {
+        const found = SZZoteroBridge._getFavoriteEntryByKey(state, key);
+        if (!found.entry || !Array.isArray(found.entry.tags)) return;
+        found.entry.tags = found.entry.tags.filter((tag) => tag !== tagId);
+      });
+    } else if (action === 'clear') {
+      if (keys.length === 0) return;
+      keys.forEach((key) => {
+        const found = SZZoteroBridge._getFavoriteEntryByKey(state, key);
+        if (!found.entry) return;
+        found.entry.tags = [];
+      });
+    } else {
+      return;
+    }
+
+    SZZoteroBridge._mergeTagsFromItems(state);
+    SZZoteroBridge._saveFavoritesState(state);
+    SZZoteroBridge._emitFavoritesState(self.webView, state);
+  }
+
+  static _configValue(name, defaultValue) {
+    const raw = NSUserDefaults.standardUserDefaults().objectForKey('mn_zotero_config_' + name);
+    if (raw === undefined || raw === null) return defaultValue;
+    return String(raw);
+  }
+
+  static _handleFavoritesBatchImport(self, payload) {
+    const data = payload && typeof payload === 'object' ? payload : {};
+    const options = data.options && typeof data.options === 'object' ? data.options : {};
+    const items = Array.isArray(data.items) ? data.items : [];
+    const result = { success: 0, skipped: 0, failed: 0 };
+    const fallbackUid = SZZoteroBridge._configValue('uid', '0');
+    const fallbackKey = SZZoteroBridge._configValue('key', '');
+    let index = 0;
+
+    const finishAll = () => {
+      Application.sharedInstance().showHUD(t('favorites_batch_import_done') + ' ' + t('favorites_batch_import_report', {
+        success: String(result.success),
+        skipped: String(result.skipped),
+        failed: String(result.failed)
+      }), self.view, 2);
+
+      const resultJson = JSON.stringify(result).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+      self.webView.evaluateJavaScript(`(function(){ try { window.__mnBatchImportResult = JSON.parse('${resultJson}'); } catch (_) { window.__mnBatchImportResult = {success:0,skipped:0,failed:0}; } if (window.onMNBatchImportResult) window.onMNBatchImportResult(); })();`, null);
+    };
+
+    const processNext = () => {
+      if (index >= items.length) {
+        finishAll();
+        return;
+      }
+
+      const rawItem = items[index++];
+      const item = SZZoteroBridge._normalizeFavoriteEntry(rawItem);
+      if (!item) {
+        result.failed += 1;
+        processNext();
+        return;
+      }
+
+      let cardCreated = false;
+      if (options.card) {
+        if (item.createNoteQuery) {
+          try {
+            SZZoteroBridge._handleCreateNote(self, item.createNoteQuery);
+            result.success += 1;
+            cardCreated = true;
+          } catch (e) {
+            result.failed += 1;
+          }
+        } else {
+          result.skipped += 1;
+        }
+      }
+
+      if (options.pdf) {
+        if (item.docMd5) {
+          try {
+            SZZoteroBridge._handleOpenDocument(self, 'docMd5=' + encodeURIComponent(item.docMd5));
+            result.success += 1;
+          } catch (e) {
+            result.failed += 1;
+          }
+        } else {
+          result.skipped += 1;
+        }
+      }
+
+      const runAnnotation = () => {
+        if (!options.annotation) {
+          processNext();
+          return;
+        }
+
+        if (options.card && !cardCreated) {
+          result.skipped += 1;
+          processNext();
+          return;
+        }
+
+        if (!item.attachmentKey || !item.itemKey) {
+          result.skipped += 1;
+          processNext();
+          return;
+        }
+
+        const uid = item.uid || fallbackUid;
+        const apiKey = item.apiKey || fallbackKey;
+        const q = [
+          'parentKey=' + encodeURIComponent(item.itemKey),
+          'attachmentKey=' + encodeURIComponent(item.attachmentKey),
+          'uid=' + encodeURIComponent(uid),
+          'key=' + encodeURIComponent(apiKey)
+        ].join('&');
+
+        try {
+          SZZoteroBridge._handleImportAnnotations(self, q);
+          result.success += 1;
+        } catch (e) {
+          result.failed += 1;
+        }
+        processNext();
+      };
+
+      // Ensure annotation import starts after card creation settles in UI/DB.
+      if (options.annotation && options.card && cardCreated) {
+        NSTimer.scheduledTimerWithTimeInterval(0.35, false, function () {
+          runAnnotation();
+        });
+      } else {
+        runAnnotation();
+      }
+    };
+
+    processNext();
   }
 
   static _resolveCloudApiBaseUrl() {

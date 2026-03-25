@@ -59,7 +59,9 @@ var Si18n = (function () {
     "field_creators": "作者列表",
     "fetching_annotations": "正在获取标注...",
     "imported_annotations": "已导入 {count} 条标注",
-    "target_literature_note_not_found": "未在当前笔记本中找到对应的文献笔记"
+    "target_literature_note_not_found": "未在当前笔记本中找到对应的文献笔记",
+    "favorites_batch_import_done": "收藏夹批量导入完成",
+    "favorites_batch_import_report": "成功{success}，跳过{skipped}，失败{failed}"
   };
 
   // 翻译数据（英文）
@@ -116,7 +118,9 @@ var Si18n = (function () {
     "field_creators": "Creators",
     "fetching_annotations": "Fetching annotations...",
     "imported_annotations": "Imported {count} annotations",
-    "target_literature_note_not_found": "Target literature note not found in current notebook"
+    "target_literature_note_not_found": "Target literature note not found in current notebook",
+    "favorites_batch_import_done": "Favorites batch import completed",
+    "favorites_batch_import_report": "Success {success}, skipped {skipped}, failed {failed}"
   };
 
   // 当前使用的翻译数据

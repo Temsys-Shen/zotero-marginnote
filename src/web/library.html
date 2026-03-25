@@ -14,6 +14,7 @@
     <header>
         <div class="view-switcher">
             <span class="view-option active" data-view="library" role="button">Library</span>
+            <span class="view-option" data-view="favorites" role="button">Favorites</span>
             <span class="view-option" data-view="selected" role="button">Selected Cards</span>
             <span class="view-option" data-view="settings" role="button">Settings</span>
         </div>
@@ -59,7 +60,7 @@
             // View switcher
             var viewOptions = document.querySelectorAll('.view-option');
             viewOptions.forEach(function(opt, idx) {
-                var values = [T('library'), T('selected_cards'), T('settings')];
+                var values = [T('library'), T('favorites'), T('selected_cards'), T('settings')];
                 if (idx < values.length) opt.textContent = values[idx];
             });
 
@@ -91,6 +92,8 @@
                     // Switch views
                     if (view === 'library') {
                         // Already on library page
+                    } else if (view === 'favorites') {
+                        window.location.href = 'favorites.html';
                     } else if (view === 'selected') {
                         window.location.href = 'selection.html';
                     } else if (view === 'settings') {
@@ -105,6 +108,77 @@
         window.MNSelectedTags = [];
         window.MNAllTags = [];
         window.MNAvailableTagsSet = null;
+        window.MNFavoritesSet = new Set();
+        window.__mnFavoritesResolver = null;
+
+        function parseFavoritesPayload(raw) {
+            if (!raw) return { items: [], tags: [] };
+            var parsed = {};
+            try {
+                parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;
+            } catch (e) {
+                parsed = { items: [], tags: [] };
+            }
+            if (!parsed || typeof parsed !== 'object') return { items: [], tags: [] };
+            return {
+                items: Array.isArray(parsed.items) ? parsed.items : [],
+                tags: Array.isArray(parsed.tags) ? parsed.tags : []
+            };
+        }
+
+        function requestFavoritesList() {
+            return new Promise(function(resolve) {
+                window.__mnFavoritesResolver = resolve;
+                sendMNProtocol('mnzotero://favorites?action=list');
+                setTimeout(function() {
+                    if (window.__mnFavoritesResolver) {
+                        var fn = window.__mnFavoritesResolver;
+                        window.__mnFavoritesResolver = null;
+                        fn({ items: [], tags: [] });
+                    }
+                }, 1200);
+            });
+        }
+
+        function buildFavoriteEntryPayload(itemData, extra) {
+            var cfg = window.__mnConfig || {};
+            var data = itemData || {};
+            var creators = Array.isArray(data.creators) ? data.creators : [];
+            var firstCreator = creators.length ? creators[0] : null;
+            var author = (firstCreator && (firstCreator.lastName || firstCreator.name)) || T('unknown');
+            var slug = cfg.slug || '';
+            var uid = cfg.uid || '0';
+            var key = cfg.key || '';
+            var lItem = 'zotero://select/library/items/' + (data.key || '');
+            var cItem = 'https://www.zotero.org/' + (slug || 'user') + '/items/' + (data.key || '');
+            var mode = 'C';
+            var createNoteUrl = buildCreateNoteUrl((data.title || T('Untitled')), data.itemType || '', (data.date || '').substring(0, 4), author, lItem, '', cItem, '', data.key || '', mode, uid, key, data, getFieldTemplates());
+            var q = '';
+            if (createNoteUrl.indexOf('?') > -1) q = createNoteUrl.split('?')[1] || '';
+            return {
+                itemKey: String(data.key || ''),
+                snapshot: data,
+                tags: Array.isArray(extra && extra.tags) ? extra.tags : [],
+                hasPdf: !!(extra && extra.hasPdf),
+                hasPdfAnnotations: !!(extra && extra.hasPdfAnnotations),
+                attachmentKey: extra && extra.attachmentKey ? String(extra.attachmentKey) : '',
+                pdfFilename: extra && extra.pdfFilename ? String(extra.pdfFilename) : '',
+                docMd5: extra && extra.docMd5 ? String(extra.docMd5) : '',
+                uid: String(uid || ''),
+                apiKey: String(key || ''),
+                slug: String(slug || ''),
+                createNoteQuery: q,
+                author: String(author || '')
+            };
+        }
+
+        function updateFavoriteButtonUI(itemKey, isFavorite) {
+            var btn = document.querySelector('.favorite-btn[data-item-key="' + itemKey + '"]');
+            if (!btn) return;
+            btn.classList.toggle('active', !!isFavorite);
+            btn.title = isFavorite ? T('favorite_remove') : T('favorite_add');
+            btn.innerHTML = isFavorite ? '★' : '☆';
+        }
 
         function resetFilterOptions() {
             window.MNCurrentCollection = '';
@@ -618,6 +692,27 @@
             setTimeout(function () { try { iframe.remove(); } catch (e) { } }, 600);
         }
 
+        window.onMNFavoritesList = function() {
+            var payload = parseFavoritesPayload(window.__mnFavoritesPayload);
+            var nextSet = new Set();
+            payload.items.forEach(function(entry) {
+                if (!entry || !entry.itemKey) return;
+                nextSet.add(String(entry.itemKey));
+            });
+            window.MNFavoritesSet = nextSet;
+            if (window.__mnFavoritesResolver) {
+                var fn = window.__mnFavoritesResolver;
+                window.__mnFavoritesResolver = null;
+                fn(payload);
+            }
+        };
+
+        function upsertFavoriteEntry(entry) {
+            if (!entry || !entry.itemKey) return;
+            var payload = encodeURIComponent(JSON.stringify(entry));
+            sendMNProtocol('mnzotero://favorites?action=upsert&payload=' + payload);
+        }
+
         function startDownloadButtonMotion(btn) {
             var rotor = btn.querySelector('.pdf-rotor');
             if (!rotor) return null;
@@ -690,6 +785,29 @@
             sendMNProtocol(downloadUrl);
         }, false);
 
+        document.addEventListener('click', function(event) {
+            var btn = event.target.closest('.favorite-btn');
+            if (!btn) return;
+            event.preventDefault();
+            event.stopPropagation();
+            var itemKey = btn.getAttribute('data-item-key') || '';
+            if (!itemKey) return;
+            var payloadRaw = btn.getAttribute('data-entry-payload') || '';
+            if (!payloadRaw) return;
+            var entry = null;
+            try {
+                entry = JSON.parse(decodeURIComponent(payloadRaw));
+            } catch (e) {
+                entry = null;
+            }
+            if (!entry) return;
+            var isFavorite = window.MNFavoritesSet.has(itemKey);
+            sendMNProtocol('mnzotero://favorites?action=toggle&payload=' + encodeURIComponent(JSON.stringify(entry)));
+            if (isFavorite) window.MNFavoritesSet.delete(itemKey);
+            else window.MNFavoritesSet.add(itemKey);
+            updateFavoriteButtonUI(itemKey, !isFavorite);
+        }, false);
+
         // Native callbacks for Document Check
         // Global callback for single document check (Local mode)
         window.onMNDocumentCheck = function(attachmentKey, docMd5) {
@@ -704,6 +822,22 @@
             } else {
                 // Failure / No Match -> hide button
                 btn.style.display = 'none';
+            }
+            var listItem = btn.closest('.list-item');
+            if (listItem) {
+                var itemKey = listItem.getAttribute('data-item-key') || '';
+                if (itemKey && window.MNFavoritesSet.has(itemKey)) {
+                    var encoded = listItem.getAttribute('data-favorite-entry') || '';
+                    if (encoded) {
+                        try {
+                            var entry = JSON.parse(decodeURIComponent(encoded));
+                            entry.docMd5 = docMd5 ? String(docMd5) : '';
+                            entry.attachmentKey = attachmentKey || entry.attachmentKey || '';
+                            upsertFavoriteEntry(entry);
+                            listItem.setAttribute('data-favorite-entry', encodeURIComponent(JSON.stringify(entry)));
+                        } catch (e) { }
+                    }
+                }
             }
             layoutActionButtons(btn.closest('.list-item-actions'));
         };
@@ -733,6 +867,10 @@
             var slug = cfg.slug || '';
             var base = '/users/' + uid;
             var d = item.data;
+            var hasPdf = false;
+            var hasPdfAnnotations = false;
+            var attachmentKey = '';
+            var pdfFilename = '';
             
             try {
                 var r_kids = await smartFetch(base + '/items/' + d.key + '/children', { forceCloud: true });
@@ -742,7 +880,9 @@
                 var p = kids.find(function (k) { return k.data.itemType === 'attachment' && (k.data.contentType === 'application/pdf' || (k.data.filename || '').endsWith('.pdf')); });
                 if (p) {
                     var pdf = p.data.key;
-                    var pdfFilename = p.data.filename || d.title || T('Untitled');
+                    hasPdf = true;
+                    attachmentKey = pdf;
+                    pdfFilename = p.data.filename || d.title || T('Untitled');
                     var safeKey = String(key || '').replace(/"/g, '"');
                     
                     // Add Download PDF button
@@ -769,11 +909,35 @@
                             var importBtnHtml = '<a href="' + importUrl + '" class="import-annotations-btn" title="' + T('import_annotations') + '">' + buildImportAnnotationsIcon() + '</a>';
                             insertActionButtonsBeforeAdd(actionContainer, importBtnHtml);
                             layoutActionButtons(actionContainer);
+                            hasPdfAnnotations = true;
                         }
                     }
                 }
             } catch (e) {
                 console.error('Failed to load attachments for ' + d.key, e);
+            }
+            if (window.MNFavoritesSet.has(String(d.key || ''))) {
+                var listItem = actionContainer ? actionContainer.closest('.list-item') : null;
+                var existingEntry = null;
+                if (listItem) {
+                    var encoded = listItem.getAttribute('data-favorite-entry') || '';
+                    if (encoded) {
+                        try {
+                            existingEntry = JSON.parse(decodeURIComponent(encoded));
+                        } catch (e) {
+                            existingEntry = null;
+                        }
+                    }
+                }
+                var nextEntry = existingEntry || buildFavoriteEntryPayload(d, {});
+                nextEntry.hasPdf = !!hasPdf;
+                nextEntry.hasPdfAnnotations = !!hasPdfAnnotations;
+                nextEntry.attachmentKey = attachmentKey || '';
+                nextEntry.pdfFilename = pdfFilename || '';
+                if (listItem) {
+                    listItem.setAttribute('data-favorite-entry', encodeURIComponent(JSON.stringify(nextEntry)));
+                }
+                upsertFavoriteEntry(nextEntry);
             }
         }
 
@@ -789,6 +953,7 @@
             ui.out.innerHTML = '';
             ui.log.style.display = 'block';
             ui.log.innerText = (typeof T === 'function' ? T('searching') : 'Searching...');
+            await requestFavoritesList();
             
             if ($('tags-loading-mask')) $('tags-loading-mask').classList.remove('hidden');
 
@@ -838,15 +1003,21 @@
                     var addTitle = (d.title || T('Untitled')).replace(/"/g, '"');
                     var author = (d.creators && d.creators[0] && (d.creators[0].lastName || d.creators[0].name)) || T('unknown');
                     var fieldTemplates = getFieldTemplates();
+                    var favoriteEntry = buildFavoriteEntryPayload(d, {});
+                    var favoriteEncoded = encodeURIComponent(JSON.stringify(favoriteEntry));
+                    var isFavorite = window.MNFavoritesSet.has(String(d.key || ''));
+                    var favoriteBtnHtml = '<button class="favorite-btn' + (isFavorite ? ' active' : '') + '" data-item-key="' + escapeHtml(String(d.key || '')) + '" data-entry-payload="' + favoriteEncoded + '" title="' + (isFavorite ? T('favorite_remove') : T('favorite_add')) + '">' + (isFavorite ? '★' : '☆') + '</button>';
                     
                     // Add URL is built but PDF URLs are unknown yet
                     var createNoteUrl = buildCreateNoteUrl((d.title || T('Untitled')), d.itemType, (d.date || '').substring(0, 4), author, lItem, '', cItem, '', d.key, 'C', uid, key, d, fieldTemplates);
                     
                     var itemEl = document.createElement('div');
                     itemEl.className = 'list-item';
+                    itemEl.setAttribute('data-item-key', String(d.key || ''));
+                    itemEl.setAttribute('data-favorite-entry', favoriteEncoded);
                     itemEl.innerHTML = `
                         <div class="list-item-body">
-                            <div class="list-title">${escapeHtml(addTitle)}</div>
+                            <div class="list-title-row">${favoriteBtnHtml}<div class="list-title">${escapeHtml(addTitle)}</div></div>
                             <div class="meta-row">
                                 <span>${escapeHtml(author)}</span>
                                 <span>${escapeHtml(d.date || '')}</span>

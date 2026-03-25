@@ -14,6 +14,7 @@
     <header>
         <div class="view-switcher">
             <span class="view-option" data-view="library" role="button">Library</span>
+            <span class="view-option" data-view="favorites" role="button">Favorites</span>
             <span class="view-option" data-view="selected" role="button">Selected Cards</span>
             <span class="view-option active" role="button">Settings</span>
         </div>
@@ -103,7 +104,7 @@
         (function initSettingsI18n() {
             var viewOptions = document.querySelectorAll('.view-option');
             viewOptions.forEach(function(opt, idx) {
-                var values = [T('library'), T('selected_cards'), T('settings')];
+                var values = [T('library'), T('favorites'), T('selected_cards'), T('settings')];
                 if (idx < values.length) opt.textContent = values[idx];
             });
 
@@ -225,6 +226,8 @@
                     var view = this.getAttribute('data-view');
                     if (view === 'library') {
                         window.location.href = 'library.html';
+                    } else if (view === 'favorites') {
+                        window.location.href = 'favorites.html';
                     } else if (view === 'selected') {
                         window.location.href = 'selection.html';
                     }
