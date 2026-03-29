@@ -212,12 +212,30 @@ var SZWebUIHandler = class {
 var SZConfigManager = class {
   static getDefaultFieldTemplates() {
     return {
-      fixed: {
-        author: 'by {{value}}',
-        year: '({{value}})',
-        type: '<z style="color:#9;font:1em;background:#eee;padding:.1em .5em;border-radius:.4em">{{value}}</z>'
-      },
-      custom: []
+      version: '2',
+      layout: {
+        rows: [
+          {
+            id: 'row_default_1',
+            blocks: [
+              { id: 'block_default_author', field: 'author', template: 'by {{value}}' },
+              { id: 'block_default_year', field: 'year', template: '({{value}})' }
+            ]
+          },
+          {
+            id: 'row_default_2',
+            blocks: [
+              { id: 'block_default_type', field: 'type', template: '<z style="color:#9;font:1em;background:#eee;padding:.1em .5em;border-radius:.4em">{{value}}</z>' }
+            ]
+          },
+          {
+            id: 'row_default_3',
+            blocks: [
+              { id: 'block_default_extra', field: 'extra', template: '{{value}}' }
+            ]
+          }
+        ]
+      }
     };
   }
 
@@ -240,34 +258,42 @@ var SZConfigManager = class {
       return defaults;
     }
 
-    const normalized = {
-      fixed: Object.assign({}, defaults.fixed),
-      custom: []
-    };
+    if (String(parsed.version || '') !== '2' || !parsed.layout || !Array.isArray(parsed.layout.rows)) {
+      return defaults;
+    }
 
-    const fixedRaw = parsed.fixed;
-    if (fixedRaw && typeof fixedRaw === 'object') {
-      for (const key in defaults.fixed) {
-        const value = fixedRaw[key];
-        if (value !== undefined && value !== null && String(value).trim()) {
-          normalized.fixed[key] = String(value);
-        }
+    const rows = [];
+    for (let i = 0; i < parsed.layout.rows.length; i++) {
+      const rowRaw = parsed.layout.rows[i];
+      if (!rowRaw || typeof rowRaw !== 'object') continue;
+      const rowIdRaw = rowRaw.id !== undefined && rowRaw.id !== null ? String(rowRaw.id).trim() : '';
+      const rowId = rowIdRaw || ('row_' + i);
+      const blocksRaw = Array.isArray(rowRaw.blocks) ? rowRaw.blocks : [];
+      const blocks = [];
+      for (let j = 0; j < blocksRaw.length; j++) {
+        const blockRaw = blocksRaw[j];
+        if (!blockRaw || typeof blockRaw !== 'object') continue;
+        const field = blockRaw.field !== undefined && blockRaw.field !== null ? String(blockRaw.field).trim() : '';
+        if (!field) continue;
+        const blockIdRaw = blockRaw.id !== undefined && blockRaw.id !== null ? String(blockRaw.id).trim() : '';
+        const templateRaw = blockRaw.template !== undefined && blockRaw.template !== null ? String(blockRaw.template) : '';
+        blocks.push({
+          id: blockIdRaw || (rowId + '_block_' + j),
+          field: field,
+          template: templateRaw || '{{value}}'
+        });
       }
+      rows.push({ id: rowId, blocks: blocks });
     }
 
-    const customRaw = Array.isArray(parsed.custom) ? parsed.custom : [];
-    for (let i = 0; i < customRaw.length; i++) {
-      const item = customRaw[i];
-      if (!item || typeof item !== 'object') continue;
-      const field = item.field !== undefined && item.field !== null ? String(item.field).trim() : '';
-      if (!field) continue;
-      const templateRaw = item.template !== undefined && item.template !== null ? String(item.template) : '';
-      normalized.custom.push({
-        field: field,
-        template: templateRaw || '{{value}}'
-      });
-    }
+    if (rows.length === 0) rows.push({ id: 'row_default_1', blocks: [] });
 
+    const normalized = {
+      version: '2',
+      layout: {
+        rows: rows
+      }
+    };
     return normalized;
   }
 
@@ -1097,7 +1123,7 @@ var SZZoteroBridge = class {
 
     if (!dynamicHtml && !l) return '';
 
-    var result = '<style>a{text-decoration:none;font-weight:bolder}</style><div>';
+    var result = '<style>a{text-decoration:none;font-weight:bolder}.custom-field-row{margin:2px 0}.custom-field-row .custom-field-block{display:inline-block;margin-right:6px}</style><div>';
     if (dynamicHtml) result += '<div class="custom-fields">' + dynamicHtml + '</div>';
     if (l) result += '<div>' + l + '</div>';
     result += '</div>';

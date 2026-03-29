@@ -326,6 +326,23 @@
             return Object.keys(favoriteState.selectedKeys).filter(function(key) { return !!favoriteState.selectedKeys[key]; });
         }
 
+        function setFavoriteSelectionByKey(key, selected) {
+            if (!key) return;
+            favoriteState.selectedKeys[key] = !!selected;
+            syncVisibleCheckboxesFromState();
+            updateToolbarState();
+        }
+
+        function toggleFavoriteSelectionByKey(key) {
+            if (!key) return;
+            setFavoriteSelectionByKey(key, !favoriteState.selectedKeys[key]);
+        }
+
+        function isInteractiveTarget(target) {
+            if (!target || typeof target.closest !== 'function') return false;
+            return !!target.closest('input, button, a, select, textarea, label');
+        }
+
         function syncVisibleCheckboxesFromState() {
             var list = $('favorites-list');
             if (!list) return;
@@ -793,9 +810,7 @@
                 var cb = event.target.closest('.favorite-checkbox');
                 if (!cb) return;
                 var key = cb.getAttribute('data-item-key') || '';
-                if (!key) return;
-                favoriteState.selectedKeys[key] = !!cb.checked;
-                updateToolbarState();
+                setFavoriteSelectionByKey(key, !!cb.checked);
             });
 
             $('favorites-list').addEventListener('click', function(event) {
@@ -850,7 +865,14 @@
                     event.preventDefault();
                     var docMd5 = eyeBtn.dataset.docMd5;
                     if (docMd5) sendMNProtocol('mnzotero://openDocument?docMd5=' + encodeURIComponent(docMd5));
+                    return;
                 }
+
+                if (isInteractiveTarget(event.target)) return;
+                var row = event.target.closest('.favorite-list-item');
+                if (!row) return;
+                var itemKey = row.getAttribute('data-item-key') || '';
+                toggleFavoriteSelectionByKey(itemKey);
             });
 
             $('favorites-list').addEventListener('dragstart', function(event) {

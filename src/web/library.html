@@ -54,6 +54,7 @@
     </div>
 
     <script src="common.js"></script>
+    <script src="onboarding.js"></script>
     <script>
         // 初始化 HTML 静态文本
         (function() {
@@ -474,7 +475,7 @@
                 case 'type':
                     return data.itemType || '';
                 case 'tags':
-                    return Array.isArray(data.tags) ? data.tags.map(t => t.tag) : [];
+                    return Array.isArray(data.tags) ? data.tags.map(t => (t && t.tag) ? t.tag : t).filter(Boolean) : [];
                 case 'abstractNote':
                     return data.abstractNote || '';
                 case 'DOI':
@@ -504,6 +505,7 @@
                 case 'creators':
                     return Array.isArray(data.creators) ? data.creators.map(c => c.name || c.lastName || '') : [];
                 default:
+                    if (data[field] !== undefined && data[field] !== null) return data[field];
                     return undefined;
             }
         }
@@ -516,10 +518,8 @@
 
         // 渲染单个字段
         function renderField(value, template, isArray) {
-            // 空值检查，不显示空字段
             if (value === undefined || value === null || value === '') return '';
 
-            // 处理多值字段
             if (isArray && Array.isArray(value)) {
                 if (value.length === 0) return '';
                 var rendered = value.map(v => {
@@ -527,13 +527,36 @@
                     var fieldHtml = template.replace('{{value}}', escaped);
                     return fieldHtml ? '<span>' + fieldHtml + '</span>' : '';
                 }).join(' ');
-                return rendered ? '<div class="custom-field">' + rendered + '</div>' : '';
+                return rendered ? '<span class="custom-field-block">' + rendered + '</span>' : '';
             }
 
-            // 处理单值字段
             var escaped = escapeHtml(value);
             var fieldHtml = template.replace('{{value}}', escaped);
-            return fieldHtml ? '<div class="custom-field">' + fieldHtml + '</div>' : '';
+            return fieldHtml ? '<span class="custom-field-block">' + fieldHtml + '</span>' : '';
+        }
+
+        function renderLayoutTemplatesHtml(templates, data) {
+            if (!templates || String(templates.version || '') !== '2') return '';
+            if (!templates.layout || !Array.isArray(templates.layout.rows)) return '';
+            if (!data) return '';
+            var html = '';
+            templates.layout.rows.forEach(function(row) {
+                if (!row || !Array.isArray(row.blocks)) return;
+                var rowParts = [];
+                row.blocks.forEach(function(block) {
+                    if (!block || !block.field) return;
+                    var value = getZoteroFieldValue(data, block.field);
+                    if (value === undefined || value === '') return;
+                    var tpl = block.template || '{{value}}';
+                    var isArray = block.field === 'tags' || block.field === 'creators';
+                    var rendered = renderField(value, tpl, isArray);
+                    if (rendered) rowParts.push(rendered);
+                });
+                if (rowParts.length > 0) {
+                    html += '<div class="custom-field-row">' + rowParts.join(' ') + '</div>';
+                }
+            });
+            return html;
         }
 
         function buildCreateNoteUrl(title, type, year, author, linkZotero, linkPdf, linkWeb, linkCloudPdf, itemKey, mode, uid, apiKey, data, templates) {
@@ -549,36 +572,8 @@
                 'key=' + encodeURIComponent(apiKey || '')
             ];
 
-            // 如果有模板配置，渲染字段HTML
             if (templates && data) {
-                var customFieldsHtml = '';
-
-                // 添加固定字段模板
-                if (templates.fixed) {
-                    for (var field in templates.fixed) {
-                        var template = templates.fixed[field];
-                        var value = getZoteroFieldValue(data, field);
-                        if (value !== undefined && value !== '') {
-                            var isArray = field === 'tags' || field === 'creators';
-                            var rendered = renderField(value, template, isArray);
-                            if (rendered) customFieldsHtml += rendered;
-                        }
-                    }
-                }
-
-                // 添加自定义字段模板
-                if (templates.custom && templates.custom.length > 0) {
-                    templates.custom.forEach(function(cf) {
-                        if (!cf.field || !cf.template) return;
-                        var value = getZoteroFieldValue(data, cf.field);
-                        if (value !== undefined && value !== '') {
-                            var isArray = cf.field === 'tags' || cf.field === 'creators';
-                            var rendered = renderField(value, cf.template, isArray);
-                            if (rendered) customFieldsHtml += rendered;
-                        }
-                    });
-                }
-
+                var customFieldsHtml = renderLayoutTemplatesHtml(templates, data);
                 if (customFieldsHtml) {
                     q.push('templatesHtml=' + encodeURIComponent(customFieldsHtml));
                 }

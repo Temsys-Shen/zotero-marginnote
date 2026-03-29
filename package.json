@@ -4,7 +4,9 @@
   "private": true,
   "scripts": {
     "build": "node scripts/build-release.js",
-    "dev": "cd src && zip -r -q ../zotero-connector-dev.mnaddon ."
+    "dev": "node scripts/live-deploy.js once",
+    "live": "node scripts/live-deploy.js watch",
+    "live:stop": "node scripts/stop-live.js"
   },
   "devDependencies": {
     "terser": "^5.46.0",

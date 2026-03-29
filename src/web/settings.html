@@ -61,30 +61,40 @@
                 </section>
 
                 <section id="settings-section-templates" class="settings-section" style="display:none">
-                    <h2 class="settings-section-title" id="settings-title-templates">Templates</h2>
-                    <div class="field-templates-panel">
+                    <div class="settings-templates-head">
+                        <h2 class="settings-section-title" id="settings-title-templates">Templates</h2>
                         <p class="field-templates-desc">Configure how Zotero fields are displayed in MarginNote cards.</p>
-                        <div class="field-template-list" id="field-template-list">
-                            <!-- Fixed fields -->
-                            <div class="field-template-item">
-                                <span class="field-name">Author</span>
-                                <input type="text" class="field-template-input" data-field="author" placeholder="by {{value}}">
-                            </div>
-                            <div class="field-template-item">
-                                <span class="field-name">Year</span>
-                                <input type="text" class="field-template-input" data-field="year" placeholder="({{value}})">
-                            </div>
-                            <div class="field-template-item">
-                                <span class="field-name">Type</span>
-                                <input type="text" class="field-template-input" data-field="type" placeholder='<z style="color:#9;font:1em;background:#eee;padding:.1em .5em;border-radius:.4em">{{value}}</z>'>
-                            </div>
-                            <hr>
-                            <div class="custom-field-section">
-                                <h4>Custom Fields</h4>
-                                <div class="custom-field-list" id="custom-field-list">
-                                    <!-- Custom fields will be added here -->
+                    </div>
+                    <div class="field-templates-panel">
+                        <div class="template-builder" id="template-builder">
+                            <div class="template-field-palette">
+                                <div class="template-palette-head">
+                                    <h4 id="template-palette-title">Field Library</h4>
+                                    <div class="field-lang-switch" id="field-lang-switch">
+                                        <button type="button" class="field-lang-btn active" data-lang="zh">中文</button>
+                                        <button type="button" class="field-lang-btn" data-lang="en">English</button>
+                                    </div>
                                 </div>
-                                <button id="add-custom-field" class="btn-add-field">+ Add Field</button>
+                                <p class="template-palette-desc" id="template-palette-desc">Drag a field into rows on the right side.</p>
+                                <div class="field-palette-list" id="field-palette-list"></div>
+                            </div>
+                            <div class="template-layout-workspace">
+                                <div class="template-layout-toolbar">
+                                    <button id="add-layout-row" class="btn-add-row">+ Add Row</button>
+                                </div>
+                                <div class="template-layout-canvas" id="template-layout-canvas"></div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="template-modal hidden" id="template-editor-modal" aria-hidden="true">
+                        <div class="template-modal-backdrop" id="template-editor-backdrop"></div>
+                        <div class="template-modal-card" role="dialog" aria-modal="true" aria-labelledby="template-editor-title">
+                            <h3 id="template-editor-title">Edit Template</h3>
+                            <p class="template-modal-field" id="template-editor-field-label">Field</p>
+                            <textarea id="template-editor-input" class="template-editor-input" rows="5"></textarea>
+                            <div class="template-modal-actions">
+                                <button type="button" id="template-editor-cancel" class="template-modal-btn secondary">Cancel</button>
+                                <button type="button" id="template-editor-save" class="template-modal-btn primary">Save</button>
                             </div>
                         </div>
                     </div>
@@ -99,6 +109,7 @@
     </main>
 
     <script src="common.js"></script>
+    <script src="onboarding.js"></script>
     <script>
         // 初始化settings页翻译
         (function initSettingsI18n() {
@@ -123,8 +134,6 @@
             var apiModeNotice = document.getElementById('api-mode-notice');
             if (apiModeNotice) apiModeNotice.textContent = T('local_api_limit_notice');
 
-            var addFieldBtn = document.getElementById('add-custom-field');
-            if (addFieldBtn) addFieldBtn.textContent = T('add_field');
             var openOnboardingBtn = document.getElementById('btn-open-onboarding');
             if (openOnboardingBtn) openOnboardingBtn.textContent = T('reopen_onboarding');
 
@@ -162,23 +171,22 @@
             var desc = document.querySelector('.field-templates-desc');
             if (desc) desc.textContent = T('field_templates_desc');
 
-            var customTitle = document.querySelector('.custom-field-section h4');
-            if (customTitle) customTitle.textContent = T('custom_fields');
-
-            var fieldLabels = {
-                author: T('field_author'),
-                year: T('field_year'),
-                type: T('field_type')
-            };
-            Object.keys(fieldLabels).forEach(function(key) {
-                var nameEl = document.querySelector('.field-template-input[data-field="' + key + '"]');
-                if (nameEl) {
-                    var label = nameEl.parentElement && nameEl.parentElement.querySelector('.field-name');
-                    if (label) label.textContent = fieldLabels[key];
-                    // 不覆盖 placeholder，保留用户自定义的默认模板
-                    // nameEl.placeholder = fieldLabels[key];
-                }
-            });
+            var paletteTitle = document.getElementById('template-palette-title');
+            if (paletteTitle) paletteTitle.textContent = T('template_field_library');
+            var fieldLangZh = document.querySelector('.field-lang-btn[data-lang="zh"]');
+            if (fieldLangZh) fieldLangZh.textContent = T('field_lang_zh');
+            var fieldLangEn = document.querySelector('.field-lang-btn[data-lang="en"]');
+            if (fieldLangEn) fieldLangEn.textContent = T('field_lang_en');
+            var paletteDesc = document.getElementById('template-palette-desc');
+            if (paletteDesc) paletteDesc.textContent = T('template_drag_hint');
+            var addRowBtn = document.getElementById('add-layout-row');
+            if (addRowBtn) addRowBtn.textContent = T('add_row');
+            var modalTitle = document.getElementById('template-editor-title');
+            if (modalTitle) modalTitle.textContent = T('template_edit_title');
+            var modalCancel = document.getElementById('template-editor-cancel');
+            if (modalCancel) modalCancel.textContent = T('template_edit_cancel');
+            var modalSave = document.getElementById('template-editor-save');
+            if (modalSave) modalSave.textContent = T('template_edit_save');
             
             // 显示 settings-view
             var settingsView = document.getElementById('settings-view');
@@ -193,7 +201,12 @@
 
             function show(targetId) {
                 sections.forEach(function(sec) {
-                    sec.style.display = (sec.id === targetId) ? 'block' : 'none';
+                    if (sec.id !== targetId) {
+                        sec.style.display = 'none';
+                        return;
+                    }
+                    if (sec.id === 'settings-section-templates') sec.style.display = 'flex';
+                    else sec.style.display = 'block';
                 });
                 navItems.forEach(function(item) {
                     var active = item.getAttribute('data-target') === targetId;
