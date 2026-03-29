@@ -30,7 +30,8 @@ function showOnboardingModal() {
         'onboarding_step_2',
         'onboarding_step_3',
         'onboarding_step_4',
-        'onboarding_step_5'
+        'onboarding_step_5',
+        'onboarding_step_6'
     ];
     var steps = stepKeys.map(function (key) {
         return T(key);

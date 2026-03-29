@@ -46,6 +46,58 @@
                 <input id="q" placeholder="Keywords (Title, Author, Year)..." onkeydown="event.key=='Enter'&&run()">
                 <button id="btn" onclick="run()">Search</button>
             </div>
+            <div class="library-toolbar">
+                <div class="toolbar-left">
+                    <div class="dropdown-wrapper">
+                        <button id="sort-trigger" class="toolbar-btn" type="button"></button>
+                        <div id="sort-menu" class="dropdown-menu hidden"></div>
+                    </div>
+                    <div class="dropdown-wrapper">
+                        <button id="filter-trigger" class="toolbar-btn" type="button"></button>
+                        <div id="filter-menu" class="dropdown-menu filter-menu hidden">
+                            <div class="filter-group">
+                                <div class="filter-group-title" id="filter-item-type-label"></div>
+                                <div class="custom-select" data-select-id="filter-item-type">
+                                    <button id="filter-item-type-trigger" class="custom-select-trigger" type="button"></button>
+                                    <div id="filter-item-type-options" class="custom-select-options hidden"></div>
+                                </div>
+                            </div>
+                            <div class="filter-group filter-year-grid">
+                                <div>
+                                    <div class="filter-group-title" id="filter-year-from-label"></div>
+                                    <div class="custom-select" data-select-id="filter-year-from">
+                                        <button id="filter-year-from-trigger" class="custom-select-trigger year-trigger" type="button"></button>
+                                        <div id="filter-year-from-options" class="custom-select-options hidden"></div>
+                                    </div>
+                                </div>
+                                <div>
+                                    <div class="filter-group-title" id="filter-year-to-label"></div>
+                                    <div class="custom-select" data-select-id="filter-year-to">
+                                        <button id="filter-year-to-trigger" class="custom-select-trigger year-trigger" type="button"></button>
+                                        <div id="filter-year-to-options" class="custom-select-options hidden"></div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="filter-group">
+                                <label class="filter-check-row">
+                                    <input id="filter-has-tag" type="checkbox">
+                                    <span id="filter-has-tag-label"></span>
+                                </label>
+                                <label class="filter-check-row">
+                                    <input id="filter-has-doi" type="checkbox">
+                                    <span id="filter-has-doi-label"></span>
+                                </label>
+                            </div>
+                            <div class="filter-actions-row">
+                                <button id="filter-reset-btn" class="toolbar-btn secondary" type="button"></button>
+                                <button id="filter-apply-btn" class="toolbar-btn primary" type="button"></button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div id="library-result-count" class="library-result-count"></div>
+            </div>
+            <div id="active-filter-summary" class="active-filter-summary hidden"></div>
             <div id="content-area">
                 <div id="log">Ready to search.</div>
                 <div id="out"></div>
@@ -72,6 +124,24 @@
             var searchBtn = document.getElementById('btn');
             if (searchBtn) searchBtn.textContent = T('search_button');
 
+            var sortBtn = document.getElementById('sort-trigger');
+            if (sortBtn) sortBtn.textContent = T('sort_button');
+            var filterBtn = document.getElementById('filter-trigger');
+            if (filterBtn) filterBtn.textContent = T('filter_button');
+            var itemTypeLabel = document.getElementById('filter-item-type-label');
+            if (itemTypeLabel) itemTypeLabel.textContent = T('filter_item_type');
+            var filterYearFromLabel = document.getElementById('filter-year-from-label');
+            if (filterYearFromLabel) filterYearFromLabel.textContent = T('filter_year_from');
+            var filterYearToLabel = document.getElementById('filter-year-to-label');
+            if (filterYearToLabel) filterYearToLabel.textContent = T('filter_year_to');
+            var filterHasTagLabel = document.getElementById('filter-has-tag-label');
+            if (filterHasTagLabel) filterHasTagLabel.textContent = T('filter_has_tag');
+            var filterHasDoiLabel = document.getElementById('filter-has-doi-label');
+            if (filterHasDoiLabel) filterHasDoiLabel.textContent = T('filter_has_doi');
+            var filterResetBtn = document.getElementById('filter-reset-btn');
+            if (filterResetBtn) filterResetBtn.textContent = T('filter_reset');
+            var filterApplyBtn = document.getElementById('filter-apply-btn');
+            if (filterApplyBtn) filterApplyBtn.textContent = T('filter_apply');
             // Log
             var logDiv = document.getElementById('log');
             if (logDiv) logDiv.textContent = T('ready_to_search');
@@ -111,6 +181,471 @@
         window.MNAvailableTagsSet = null;
         window.MNFavoritesSet = new Set();
         window.__mnFavoritesResolver = null;
+        
+        function getDefaultYearRange() {
+            var year = (new Date()).getFullYear();
+            return {
+                from: String(year - 5),
+                to: String(year)
+            };
+        }
+
+        var defaultYearRange = getDefaultYearRange();
+        var MN_ITEM_TYPE_OPTIONS = [
+            { value: 'all', labelKey: 'filter_item_type_all' },
+            { value: 'artwork', label: 'Artwork' },
+            { value: 'audioRecording', label: 'Audio Recording' },
+            { value: 'bill', label: 'Bill' },
+            { value: 'blogPost', label: 'Blog Post' },
+            { value: 'book', label: 'Book' },
+            { value: 'bookSection', label: 'Book Section' },
+            { value: 'case', label: 'Case' },
+            { value: 'conferencePaper', label: 'Conference Paper' },
+            { value: 'dataset', label: 'Dataset' },
+            { value: 'dictionaryEntry', label: 'Dictionary Entry' },
+            { value: 'document', label: 'Document' },
+            { value: 'email', label: 'E-mail' },
+            { value: 'encyclopediaArticle', label: 'Encyclopedia Article' },
+            { value: 'film', label: 'Film' },
+            { value: 'forumPost', label: 'Forum Post' },
+            { value: 'hearing', label: 'Hearing' },
+            { value: 'instantMessage', label: 'Instant Message' },
+            { value: 'interview', label: 'Interview' },
+            { value: 'journalArticle', label: 'Journal Article' },
+            { value: 'letter', label: 'Letter' },
+            { value: 'magazineArticle', label: 'Magazine Article' },
+            { value: 'manuscript', label: 'Manuscript' },
+            { value: 'map', label: 'Map' },
+            { value: 'newspaperArticle', label: 'Newspaper Article' },
+            { value: 'patent', label: 'Patent' },
+            { value: 'podcast', label: 'Podcast' },
+            { value: 'preprint', label: 'Preprint' },
+            { value: 'presentation', label: 'Presentation' },
+            { value: 'radioBroadcast', label: 'Radio Broadcast' },
+            { value: 'report', label: 'Report' },
+            { value: 'computerProgram', label: 'Software' },
+            { value: 'standard', label: 'Standard' },
+            { value: 'statute', label: 'Statute' },
+            { value: 'tvBroadcast', label: 'TV Broadcast' },
+            { value: 'thesis', label: 'Thesis' },
+            { value: 'videoRecording', label: 'Video Recording' },
+            { value: 'webpage', label: 'Web Page' }
+        ];
+        window.MNLibraryControls = {
+            sort: 'year_desc',
+            filters: {
+                itemType: 'all',
+                yearFrom: defaultYearRange.from,
+                yearTo: defaultYearRange.to,
+                hasTag: false,
+                hasDoi: false
+            }
+        };
+
+        function getItemTypeLabel(typeValue) {
+            var val = String(typeValue || 'all');
+            var found = MN_ITEM_TYPE_OPTIONS.find(function(opt) { return opt.value === val; });
+            if (!found) return val;
+            if (found.labelKey) return T(found.labelKey);
+            return found.label || val;
+        }
+
+        function renderItemTypeOptions() {
+            var optionsEl = $('filter-item-type-options');
+            if (!optionsEl) return;
+            var currentValue = String(window.MNLibraryControls.filters.itemType || 'all');
+            var html = MN_ITEM_TYPE_OPTIONS.map(function(opt) {
+                var label = opt.labelKey ? T(opt.labelKey) : (opt.label || opt.value);
+                return '<button type="button" class="custom-select-option" data-select-id="filter-item-type" data-value="' + escapeHtml(opt.value) + '">' + escapeHtml(label) + '</button>';
+            }).join('');
+            optionsEl.innerHTML = html;
+            setCustomSelectValue('filter-item-type', currentValue);
+        }
+
+        function cloneFilterState(filters) {
+            return {
+                itemType: filters && filters.itemType ? String(filters.itemType) : 'all',
+                yearFrom: filters && filters.yearFrom ? String(filters.yearFrom) : '',
+                yearTo: filters && filters.yearTo ? String(filters.yearTo) : '',
+                hasTag: !!(filters && filters.hasTag),
+                hasDoi: !!(filters && filters.hasDoi)
+            };
+        }
+
+        function getCustomSelectOptions(selectId) {
+            return document.querySelectorAll('.custom-select-option[data-select-id="' + selectId + '"]');
+        }
+
+        function closeAllCustomSelectOptions() {
+            var optionPanels = document.querySelectorAll('.custom-select-options');
+            optionPanels.forEach(function(panel) {
+                panel.classList.add('hidden');
+            });
+            var triggers = document.querySelectorAll('.custom-select-trigger');
+            triggers.forEach(function(trigger) {
+                trigger.classList.remove('open');
+            });
+        }
+
+        function openCustomSelectOptions(selectId) {
+            closeAllCustomSelectOptions();
+            var panel = $(selectId + '-options');
+            var trigger = $(selectId + '-trigger');
+            if (!panel || !trigger) return;
+            panel.classList.remove('hidden');
+            trigger.classList.add('open');
+        }
+
+        function setCustomSelectValue(selectId, value) {
+            var stringValue = String(value || '');
+            var trigger = $(selectId + '-trigger');
+            var options = getCustomSelectOptions(selectId);
+            var found = false;
+            options.forEach(function(opt) {
+                var isSelected = (opt.getAttribute('data-value') || '') === stringValue;
+                opt.classList.toggle('selected', isSelected);
+                if (isSelected) {
+                    found = true;
+                    if (trigger) trigger.textContent = opt.textContent || '';
+                }
+            });
+            if (!found && options.length > 0) {
+                options[0].classList.add('selected');
+                if (trigger) trigger.textContent = options[0].textContent || '';
+            }
+            if (trigger) {
+                var nextValue = found ? stringValue : (options[0] ? (options[0].getAttribute('data-value') || '') : '');
+                trigger.setAttribute('data-value', nextValue);
+            }
+        }
+
+        function getCustomSelectValue(selectId) {
+            var trigger = $(selectId + '-trigger');
+            if (!trigger) return '';
+            return String(trigger.getAttribute('data-value') || '');
+        }
+
+        function renderYearOptions() {
+            var fromOptionsEl = $('filter-year-from-options');
+            var toOptionsEl = $('filter-year-to-options');
+            if (!fromOptionsEl || !toOptionsEl) return;
+            var currentYear = (new Date()).getFullYear();
+            var startYear = currentYear - 80;
+            var html = '';
+            for (var y = currentYear; y >= startYear; y--) {
+                var yearStr = String(y);
+                html += '<button type="button" class="custom-select-option" data-select-id="filter-year-from" data-value="' + yearStr + '">' + yearStr + '</button>';
+            }
+            fromOptionsEl.innerHTML = html;
+            var htmlTo = '';
+            for (var yy = currentYear; yy >= startYear; yy--) {
+                var yearToStr = String(yy);
+                htmlTo += '<button type="button" class="custom-select-option" data-select-id="filter-year-to" data-value="' + yearToStr + '">' + yearToStr + '</button>';
+            }
+            toOptionsEl.innerHTML = htmlTo;
+            setCustomSelectValue('filter-year-from', String(window.MNLibraryControls.filters.yearFrom || ''));
+            setCustomSelectValue('filter-year-to', String(window.MNLibraryControls.filters.yearTo || ''));
+        }
+
+        function getSortOptions() {
+            return [
+                { key: 'year_desc', label: T('sort_year_desc') },
+                { key: 'year_asc', label: T('sort_year_asc') },
+                { key: 'title_asc', label: T('sort_title_asc') },
+                { key: 'author_asc', label: T('sort_author_asc') }
+            ];
+        }
+
+        function getSortLabel(sortKey) {
+            var options = getSortOptions();
+            var found = options.find(function(opt) { return opt.key === sortKey; });
+            return found ? found.label : options[0].label;
+        }
+
+        function extractYearNumber(rawDate) {
+            var text = String(rawDate || '');
+            var match = text.match(/(\d{4})/);
+            if (!match) return 0;
+            var parsed = Number(match[1]);
+            return Number.isFinite(parsed) ? parsed : 0;
+        }
+
+        function getLibraryItemMeta(item) {
+            var data = item && item.data ? item.data : {};
+            var creators = Array.isArray(data.creators) ? data.creators : [];
+            var firstCreator = creators.length ? creators[0] : null;
+            var author = (firstCreator && (firstCreator.lastName || firstCreator.name)) || '';
+            var tags = Array.isArray(data.tags) ? data.tags : [];
+            var year = extractYearNumber(data.date || '');
+            return {
+                title: String(data.title || ''),
+                titleLower: String(data.title || '').toLowerCase(),
+                author: String(author || ''),
+                authorLower: String(author || '').toLowerCase(),
+                year: year,
+                itemType: String(data.itemType || ''),
+                hasTag: tags.length > 0,
+                hasDoi: !!String(data.DOI || '').trim()
+            };
+        }
+
+        function matchesAdvancedFilters(meta, filters) {
+            if (!filters) return true;
+            if (filters.itemType && filters.itemType !== 'all' && meta.itemType !== filters.itemType) return false;
+            var yearFrom = Number(filters.yearFrom || 0);
+            var yearTo = Number(filters.yearTo || 0);
+            if (yearFrom > 0 && (meta.year <= 0 || meta.year < yearFrom)) return false;
+            if (yearTo > 0 && (meta.year <= 0 || meta.year > yearTo)) return false;
+            if (filters.hasTag && !meta.hasTag) return false;
+            if (filters.hasDoi && !meta.hasDoi) return false;
+            return true;
+        }
+
+        function sortLibraryItems(rows, sortKey) {
+            var sorted = rows.slice();
+            sorted.sort(function(a, b) {
+                var am = a.meta;
+                var bm = b.meta;
+                if (sortKey === 'year_asc') {
+                    return (am.year || 0) - (bm.year || 0) || am.titleLower.localeCompare(bm.titleLower);
+                }
+                if (sortKey === 'title_asc') {
+                    return am.titleLower.localeCompare(bm.titleLower) || (bm.year || 0) - (am.year || 0);
+                }
+                if (sortKey === 'author_asc') {
+                    return am.authorLower.localeCompare(bm.authorLower) || am.titleLower.localeCompare(bm.titleLower);
+                }
+                return (bm.year || 0) - (am.year || 0) || am.titleLower.localeCompare(bm.titleLower);
+            });
+            return sorted;
+        }
+
+        function renderSortMenu() {
+            var menu = $('sort-menu');
+            if (!menu) return;
+            var state = window.MNLibraryControls || {};
+            var html = getSortOptions().map(function(opt) {
+                var selectedClass = state.sort === opt.key ? ' selected' : '';
+                return '<button type="button" class="sort-menu-item' + selectedClass + '" data-sort-key="' + escapeHtml(opt.key) + '">' + escapeHtml(opt.label) + '</button>';
+            }).join('');
+            menu.innerHTML = html;
+        }
+
+        function updateLibraryControlText() {
+            var state = window.MNLibraryControls || {};
+            var sortBtn = $('sort-trigger');
+            if (sortBtn) sortBtn.textContent = T('sort_button') + '·' + getSortLabel(state.sort || 'year_desc');
+            var filterBtn = $('filter-trigger');
+            if (filterBtn) {
+                var filters = state.filters || {};
+                var count = 0;
+                if (filters.itemType && filters.itemType !== 'all') count += 1;
+                if (filters.yearFrom) count += 1;
+                if (filters.yearTo) count += 1;
+                if (filters.hasTag) count += 1;
+                if (filters.hasDoi) count += 1;
+                filterBtn.textContent = count > 0 ? (T('filter_button') + '(' + count + ')') : T('filter_button');
+                filterBtn.classList.toggle('has-filter', count > 0);
+            }
+        }
+
+        function openSortMenu() {
+            renderSortMenu();
+            var menu = $('sort-menu');
+            if (!menu) return;
+            menu.classList.remove('hidden');
+            menu.classList.add('show');
+        }
+
+        function closeSortMenu() {
+            var menu = $('sort-menu');
+            if (!menu) return;
+            menu.classList.add('hidden');
+            menu.classList.remove('show');
+        }
+
+        function syncFilterMenuFromState() {
+            var state = window.MNLibraryControls || {};
+            var filters = cloneFilterState(state.filters);
+            setCustomSelectValue('filter-item-type', filters.itemType || 'all');
+            setCustomSelectValue('filter-year-from', filters.yearFrom || '');
+            setCustomSelectValue('filter-year-to', filters.yearTo || '');
+            if ($('filter-has-tag')) $('filter-has-tag').checked = !!filters.hasTag;
+            if ($('filter-has-doi')) $('filter-has-doi').checked = !!filters.hasDoi;
+        }
+
+        function readFilterMenuState() {
+            var next = {
+                itemType: getCustomSelectValue('filter-item-type') || 'all',
+                yearFrom: getCustomSelectValue('filter-year-from') || '',
+                yearTo: getCustomSelectValue('filter-year-to') || '',
+                hasTag: $('filter-has-tag') ? !!$('filter-has-tag').checked : false,
+                hasDoi: $('filter-has-doi') ? !!$('filter-has-doi').checked : false
+            };
+            return next;
+        }
+
+        function openFilterMenu() {
+            syncFilterMenuFromState();
+            var menu = $('filter-menu');
+            if (!menu) return;
+            menu.classList.remove('hidden');
+            menu.classList.add('show');
+        }
+
+        function closeFilterMenu() {
+            var menu = $('filter-menu');
+            if (!menu) return;
+            menu.classList.add('hidden');
+            menu.classList.remove('show');
+            closeAllCustomSelectOptions();
+        }
+
+        function updateResultCount(total, shown) {
+            var counter = $('library-result-count');
+            if (!counter) return;
+            counter.textContent = T('result_count').replace('{shown}', String(shown || 0)).replace('{total}', String(total || 0));
+        }
+
+        function updateActiveFilterSummary() {
+            var state = window.MNLibraryControls || {};
+            var filters = state.filters || {};
+            var parts = [];
+            if (filters.itemType && filters.itemType !== 'all') {
+                parts.push(getItemTypeLabel(filters.itemType));
+            }
+            if (filters.yearFrom) parts.push(T('filter_year_from') + ' ' + filters.yearFrom);
+            if (filters.yearTo) parts.push(T('filter_year_to') + ' ' + filters.yearTo);
+            if (filters.hasTag) parts.push(T('filter_has_tag'));
+            if (filters.hasDoi) parts.push(T('filter_has_doi'));
+
+            var summary = $('active-filter-summary');
+            if (!summary) return;
+            if (!parts.length) {
+                summary.classList.add('hidden');
+                summary.textContent = '';
+                return;
+            }
+            summary.classList.remove('hidden');
+            summary.textContent = T('filter_active_prefix') + '：' + parts.join(' · ');
+        }
+
+        function applyLibraryControls(items) {
+            var state = window.MNLibraryControls || {};
+            var rows = items.map(function(item) {
+                return { item: item, meta: getLibraryItemMeta(item) };
+            }).filter(function(row) {
+                return matchesAdvancedFilters(row.meta, state.filters || {});
+            });
+            rows = sortLibraryItems(rows, state.sort || 'year_desc');
+            return rows.map(function(row) { return row.item; });
+        }
+
+        (function initLibraryControlEvents() {
+            renderItemTypeOptions();
+            renderYearOptions();
+            syncFilterMenuFromState();
+            updateLibraryControlText();
+            renderSortMenu();
+            updateActiveFilterSummary();
+
+            var sortTrigger = $('sort-trigger');
+            var filterTrigger = $('filter-trigger');
+            var sortMenu = $('sort-menu');
+            var filterMenu = $('filter-menu');
+            var applyBtn = $('filter-apply-btn');
+            var resetBtn = $('filter-reset-btn');
+
+            if (sortTrigger) {
+                sortTrigger.addEventListener('click', function(event) {
+                    event.stopPropagation();
+                    if (sortMenu && !sortMenu.classList.contains('hidden')) closeSortMenu();
+                    else {
+                        closeFilterMenu();
+                        openSortMenu();
+                    }
+                });
+            }
+
+            if (sortMenu) {
+                sortMenu.addEventListener('click', function(event) {
+                    var target = event.target.closest('.sort-menu-item');
+                    if (!target) return;
+                    var sortKey = target.getAttribute('data-sort-key') || '';
+                    if (!sortKey) return;
+                    window.MNLibraryControls.sort = sortKey;
+                    updateLibraryControlText();
+                    closeSortMenu();
+                    run();
+                });
+            }
+
+            if (filterTrigger) {
+                filterTrigger.addEventListener('click', function(event) {
+                    event.stopPropagation();
+                    if (filterMenu && !filterMenu.classList.contains('hidden')) closeFilterMenu();
+                    else {
+                        closeSortMenu();
+                        openFilterMenu();
+                    }
+                });
+            }
+
+            if (applyBtn) {
+                applyBtn.addEventListener('click', function() {
+                    window.MNLibraryControls.filters = readFilterMenuState();
+                    closeFilterMenu();
+                    updateLibraryControlText();
+                    updateActiveFilterSummary();
+                    run();
+                });
+            }
+
+            if (resetBtn) {
+                resetBtn.addEventListener('click', function() {
+                    var yearRange = getDefaultYearRange();
+                    var reset = { itemType: 'all', yearFrom: yearRange.from, yearTo: yearRange.to, hasTag: false, hasDoi: false };
+                    window.MNLibraryControls.filters = reset;
+                    syncFilterMenuFromState();
+                    updateLibraryControlText();
+                    updateActiveFilterSummary();
+                });
+            }
+
+            if (filterMenu) {
+                filterMenu.addEventListener('click', function(event) {
+                    var trigger = event.target.closest('.custom-select-trigger');
+                    if (trigger) {
+                        var wrapper = trigger.closest('.custom-select');
+                        if (!wrapper) return;
+                        var selectId = wrapper.getAttribute('data-select-id') || '';
+                        if (!selectId) return;
+                        var panel = $(selectId + '-options');
+                        var isOpen = panel && !panel.classList.contains('hidden');
+                        if (isOpen) closeAllCustomSelectOptions();
+                        else openCustomSelectOptions(selectId);
+                        return;
+                    }
+
+                    var option = event.target.closest('.custom-select-option');
+                    if (option) {
+                        var targetSelectId = option.getAttribute('data-select-id') || '';
+                        var value = option.getAttribute('data-value') || '';
+                        if (!targetSelectId) return;
+                        setCustomSelectValue(targetSelectId, value);
+                        closeAllCustomSelectOptions();
+                    }
+                });
+            }
+
+            document.addEventListener('click', function(event) {
+                var inSort = event.target && event.target.closest && event.target.closest('#sort-menu');
+                var onSortBtn = event.target && event.target.closest && event.target.closest('#sort-trigger');
+                var inFilter = event.target && event.target.closest && event.target.closest('#filter-menu');
+                if (!inSort && !onSortBtn) closeSortMenu();
+                if (!inFilter) closeAllCustomSelectOptions();
+            });
+        })();
 
         function parseFavoritesPayload(raw) {
             if (!raw) return { items: [], tags: [] };
@@ -978,6 +1513,7 @@
             ui.out.innerHTML = '';
             ui.log.style.display = 'block';
             ui.log.innerText = (typeof T === 'function' ? T('searching') : 'Searching...');
+            updateResultCount(0, 0);
             await requestFavoritesList();
             
             if ($('tags-loading-mask')) $('tags-loading-mask').classList.remove('hidden');
@@ -996,7 +1532,11 @@
                 if (!r1.ok) throw new Error((typeof T === 'function' ? T('connection_failed') : 'Connection failed'));
 
                 const rawJson = await r1.json();
-                const items = rawJson.filter(i => i.data && !['attachment', 'note', 'annotation'].includes(i.data.itemType));
+                const sourceItems = rawJson.filter(i => i.data && !['attachment', 'note', 'annotation'].includes(i.data.itemType));
+                const items = applyLibraryControls(sourceItems);
+                updateLibraryControlText();
+                updateActiveFilterSummary();
+                updateResultCount(sourceItems.length, items.length);
 
                 var extractedTags = new Set();
                 items.forEach(function(item) {
@@ -1062,7 +1602,10 @@
                     loadItemAttachments(item, actionContainer);
                 });
 
-            } catch (e) { ui.log.innerText = 'Error: ' + e.message; }
+            } catch (e) { 
+                ui.log.innerText = 'Error: ' + e.message;
+                updateResultCount(0, 0);
+            }
             finally { 
                 ui.btn.disabled = false; 
                 if ($('tags-loading-mask')) $('tags-loading-mask').classList.add('hidden');
