@@ -12,6 +12,7 @@
 - 开始编码前必须先查两篇:
   - JavaScript原生环境(理解JSCore限制,如无 `fetch`/无DOM等)(<https://mn-docs.museday.top/reference/js-runtime/>)
   - 全局与入口对象(Global Variables)(理解 `JSB`/`self`/`Application`/`Database`/`Note`等全局注入对象)(<https://mn-docs.museday.top/reference/global/global-variables/>)
+- 严禁使用alloc()
 
 ## 运行时与能力差异(不要按前端思维)
 

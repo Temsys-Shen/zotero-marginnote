@@ -15,16 +15,19 @@
         <div class="view-switcher">
             <span class="view-option" data-view="library" role="button">Library</span>
             <span class="view-option" data-view="favorites" role="button">Favorites</span>
-            <span class="view-option active" data-view="selected" role="button">Selected Cards</span>
+            <span class="view-option active" data-view="selected" role="button">Literature Cards</span>
             <span class="view-option" data-view="settings" role="button">Settings</span>
         </div>
     </header>
 
     <div id="selected-panel" class="show">
         <div id="selected-toolbar" class="selected-toolbar">
-            <button type="button" id="btn-refresh">Refresh</button>
+            <button type="button" id="btn-select-all">Select All</button>
+            <button type="button" id="btn-invert">Invert</button>
+            <button type="button" id="btn-select-current">Select Current</button>
             <button type="button" id="btn-select-in-zotero">Select in Zotero</button>
-            <button type="button" id="btn-export-all-notes">Push All Notes</button>
+            <button type="button" id="btn-export-all-notes">Push Notes</button>
+            <span id="selected-counter" class="selected-counter"></span>
         </div>
         <div id="selected-empty" class="selected-empty-state">Loading…</div>
         <div id="selected-list" class="list-container" style="display: none;"></div>
@@ -57,13 +60,32 @@
             });
         })();
 
-        function loadSelectedNotes() {
+        var selectionState = {
+            list: [],
+            checkedByNoteId: {},
+            awaitingCurrentSelection: false
+        };
+
+        function escapeHtml(text) {
+            if (text === undefined || text === null) return '';
+            return String(text).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+        }
+
+        function loadLiteratureNotes() {
             var emptyEl = $('selected-empty');
             if (emptyEl) emptyEl.style.display = 'block';
             if (emptyEl) emptyEl.textContent = T('loading');
             var listEl = $('selected-list');
             if (listEl) listEl.style.display = 'none';
             if (listEl) listEl.innerHTML = '';
+            var iframe = document.createElement('iframe');
+            iframe.style.display = 'none';
+            iframe.src = 'mnzotero://getLiteratureNotesList';
+            document.body.appendChild(iframe);
+            setTimeout(function () { try { iframe.remove(); } catch (e) { } }, 500);
+        }
+
+        function loadCurrentSelectedNotes() {
             var iframe = document.createElement('iframe');
             iframe.style.display = 'none';
             iframe.src = 'mnzotero://getSelectedNotes';
@@ -89,33 +111,97 @@
         }
 
         // Auto-load on page load
-        loadSelectedNotes();
+        loadLiteratureNotes();
+
+        window.onLiteratureNotesList = function () {
+            var list = window.__literatureNotes;
+            if (!Array.isArray(list)) list = [];
+            selectionState.list = list.slice();
+            var nextChecked = {};
+            list.forEach(function (item) {
+                var noteId = item && item.noteId ? String(item.noteId) : '';
+                if (!noteId) return;
+                if (selectionState.checkedByNoteId[noteId]) nextChecked[noteId] = true;
+            });
+            selectionState.checkedByNoteId = nextChecked;
+            renderSelectionList();
+        };
 
         window.onSelectedNotes = function () {
             var list = window.__selectedNotes;
             if (!Array.isArray(list)) list = [];
+            if (!selectionState.awaitingCurrentSelection) return;
+            selectionState.awaitingCurrentSelection = false;
+
+            for (var i = 0; i < list.length; i++) {
+                var noteId = list[i] && list[i].noteId ? String(list[i].noteId) : '';
+                if (!noteId) continue;
+                selectionState.checkedByNoteId[noteId] = true;
+            }
+            renderSelectionList();
+        };
+
+        function getCheckedTargets() {
+            var list = selectionState.list;
+            var checked = selectionState.checkedByNoteId || {};
+            var out = [];
+            for (var i = 0; i < list.length; i++) {
+                var item = list[i];
+                if (!item || !item.noteId || !item.itemKey) continue;
+                var noteId = String(item.noteId);
+                if (!checked[noteId]) continue;
+                out.push({ noteId: noteId, itemKey: String(item.itemKey), title: item.title ? String(item.title) : '' });
+            }
+            return out;
+        }
+
+        function getCheckedCount() {
+            return getCheckedTargets().length;
+        }
+
+        function updateToolbarState() {
+            var total = selectionState.list.length;
+            var checkedCount = getCheckedCount();
             var toolbarEl = $('selected-toolbar');
+            var counterEl = $('selected-counter');
+            if (counterEl) counterEl.textContent = T('selected_count_summary', { selected: String(checkedCount), total: String(total) });
+
+            var btnSelect = $('btn-select-in-zotero');
+            var btnExportChecked = $('btn-export-all-notes');
+            var btnSelectAll = $('btn-select-all');
+            var btnInvert = $('btn-invert');
+            var btnSelectCurrent = $('btn-select-current');
+
+            if (btnSelect) btnSelect.disabled = checkedCount === 0;
+            if (btnExportChecked) btnExportChecked.disabled = checkedCount === 0;
+            if (btnSelectAll) btnSelectAll.disabled = total === 0;
+            if (btnInvert) btnInvert.disabled = total === 0;
+            if (btnSelectCurrent) btnSelectCurrent.disabled = total === 0;
+            if (toolbarEl) toolbarEl.style.display = 'flex';
+        }
+
+        function renderSelectionList() {
+            var list = selectionState.list;
             var emptyEl = $('selected-empty');
             var listEl = $('selected-list');
-            
-            updateToolbarState(list.length);
+            updateToolbarState();
             
             if (list.length === 0) {
-                if (toolbarEl) toolbarEl.style.display = 'flex';
                 if (emptyEl) emptyEl.style.display = 'block';
-                if (emptyEl) emptyEl.textContent = T('no_literature_cards');
+                if (emptyEl) emptyEl.textContent = T('no_literature_cards_in_notebook');
                 if (listEl) listEl.style.display = 'none';
                 if (listEl) listEl.innerHTML = '';
                 return;
             }
-            if (toolbarEl) toolbarEl.style.display = 'flex';
             if (emptyEl) emptyEl.style.display = 'none';
             if (listEl) listEl.style.display = 'block';
             var html = list.map(function (item) {
-                var title = (item.title || '').replace(/</g, '<').replace(/>/g, '>').replace(/"/g, '"');
-                var noteId = item.noteId || '';
-                var itemKey = item.itemKey || '';
+                var title = escapeHtml(item.title || '');
+                var noteId = item.noteId ? String(item.noteId) : '';
+                var itemKey = item.itemKey ? String(item.itemKey) : '';
+                var checked = selectionState.checkedByNoteId[noteId] ? 'checked' : '';
                 return '<div class="list-item selectable-note-row" onclick="focusNote(\'' + noteId + '\')" style="cursor:pointer;">'
+                    + '<div class="favorite-check-wrap"><input type="checkbox" class="favorite-checkbox selected-note-checkbox" data-note-id="' + noteId + '" ' + checked + ' onclick="toggleSelectionByCheckbox(event,\'' + noteId + '\')"></div>'
                     + '<div class="list-item-body"><div class="list-title">' + title + '</div></div>'
                     + '<div class="list-item-actions">'
                     + '<button type="button" class="row-export-btn" onclick="exportSingle(event,\'' + noteId + '\',\'' + itemKey + '\')">' + T('push_note') + '</button>'
@@ -123,6 +209,17 @@
             }).join('');
             if (listEl) listEl.innerHTML = html;
         };
+
+        function toggleSelectionByCheckbox(evt, noteId) {
+            if (evt && evt.stopPropagation) evt.stopPropagation();
+            if (!noteId) return;
+            if (selectionState.checkedByNoteId[noteId]) {
+                delete selectionState.checkedByNoteId[noteId];
+            } else {
+                selectionState.checkedByNoteId[noteId] = true;
+            }
+            updateToolbarState();
+        }
 
         function focusNote(noteId) {
             if (!noteId) return;
@@ -146,39 +243,54 @@
             sendMNProtocol('mnzotero://exportLiteratureNotes?' + q.join('&'));
         }
 
-        function refreshSelectedNotes() {
-            loadSelectedNotes();
-        }
-
-        function updateToolbarState(listLength) {
-            var btnSelect = $('btn-select-in-zotero');
-            var btnExportAll = $('btn-export-all-notes');
-            
-            if (btnSelect) {
-                btnSelect.disabled = listLength === 0;
-            }
-            if (btnExportAll) {
-                btnExportAll.disabled = listLength === 0;
-            }
-        }
-
         (function initSelectedToolbar() {
-            var btnRefresh = $('btn-refresh');
+            var btnSelectAll = $('btn-select-all');
+            var btnInvert = $('btn-invert');
+            var btnSelectCurrent = $('btn-select-current');
             var btnSelect = $('btn-select-in-zotero');
             var btnExportAll = $('btn-export-all-notes');
-            
-            if (btnRefresh) {
-                btnRefresh.textContent = T('refresh');
-                btnRefresh.addEventListener('click', function () {
-                    refreshSelectedNotes();
+
+            if (btnSelectAll) {
+                btnSelectAll.textContent = T('select_all');
+                btnSelectAll.addEventListener('click', function () {
+                    var list = selectionState.list;
+                    for (var i = 0; i < list.length; i++) {
+                        var noteId = list[i] && list[i].noteId ? String(list[i].noteId) : '';
+                        if (!noteId) continue;
+                        selectionState.checkedByNoteId[noteId] = true;
+                    }
+                    renderSelectionList();
+                });
+            }
+
+            if (btnInvert) {
+                btnInvert.textContent = T('invert_selection');
+                btnInvert.addEventListener('click', function () {
+                    var list = selectionState.list;
+                    var next = {};
+                    for (var i = 0; i < list.length; i++) {
+                        var noteId = list[i] && list[i].noteId ? String(list[i].noteId) : '';
+                        if (!noteId) continue;
+                        if (!selectionState.checkedByNoteId[noteId]) next[noteId] = true;
+                    }
+                    selectionState.checkedByNoteId = next;
+                    renderSelectionList();
+                });
+            }
+
+            if (btnSelectCurrent) {
+                btnSelectCurrent.textContent = T('select_current_selected_cards');
+                btnSelectCurrent.addEventListener('click', function () {
+                    selectionState.awaitingCurrentSelection = true;
+                    loadCurrentSelectedNotes();
                 });
             }
             
             if (btnSelect) {
                 btnSelect.addEventListener('click', function () {
-                    var list = window.__selectedNotes;
-                    if (!Array.isArray(list) || list.length === 0) return;
-                    var keys = list.map(function (item) { return item.itemKey || ''; }).filter(Boolean);
+                    var targets = getCheckedTargets();
+                    if (!targets.length) return;
+                    var keys = targets.map(function (item) { return item.itemKey || ''; }).filter(Boolean);
                     if (keys.length === 0) return;
                     var url = 'zotero://select/library/items?itemKey=' + keys.join(',');
                     var a = document.createElement('a');
@@ -192,15 +304,20 @@
             }
             if (btnExportAll) {
                 btnExportAll.addEventListener('click', function () {
+                    var targets = getCheckedTargets().map(function (item) {
+                        return { noteId: item.noteId, itemKey: item.itemKey };
+                    });
+                    if (!targets.length) return;
                     var cfg = getSyncConfig();
                     var q = [
                         'mode=' + encodeURIComponent(cfg.mode || ''),
                         'uid=' + encodeURIComponent(cfg.uid || ''),
-                        'key=' + encodeURIComponent(cfg.key || '')
+                        'key=' + encodeURIComponent(cfg.key || ''),
+                        'payload=' + encodeURIComponent(JSON.stringify(targets))
                     ];
-                    sendMNProtocol('mnzotero://exportAllLiteratureNotes?' + q.join('&'));
+                    sendMNProtocol('mnzotero://exportCheckedLiteratureNotes?' + q.join('&'));
                 });
-                btnExportAll.textContent = T('push_all_notes');
+                btnExportAll.textContent = T('push_checked_notes');
             }
         })();
     </script>

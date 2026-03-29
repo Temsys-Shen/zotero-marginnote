@@ -372,6 +372,11 @@ var SZZoteroBridge = class {
       return false;
     }
 
+    if (host === 'getLiteratureNotesList' || path.indexOf('getLiteratureNotesList') !== -1) {
+      SZZoteroBridge._handleGetLiteratureNotesList(self);
+      return false;
+    }
+
     if (host === 'createNote' || path.indexOf('createNote') !== -1) {
       const queryString = SZZoteroBridge._getQueryString(url, urlString);
       SZZoteroBridge._handleCreateNote(self, queryString);
@@ -404,6 +409,12 @@ var SZZoteroBridge = class {
     if (host === 'exportAllLiteratureNotes' || path.indexOf('exportAllLiteratureNotes') !== -1) {
       const queryString = SZZoteroBridge._getQueryString(url, urlString);
       SZZoteroBridge._handleExportAllLiteratureNotes(self, queryString);
+      return false;
+    }
+
+    if (host === 'exportCheckedLiteratureNotes' || path.indexOf('exportCheckedLiteratureNotes') !== -1) {
+      const queryString = SZZoteroBridge._getQueryString(url, urlString);
+      SZZoteroBridge._handleExportCheckedLiteratureNotes(self, queryString);
       return false;
     }
 
@@ -856,6 +867,17 @@ var SZZoteroBridge = class {
     self.webView.evaluateJavaScript(`(function(){ try { window.__selectedNotes = JSON.parse('${esc}'); } catch (_) { window.__selectedNotes = []; } if (window.onSelectedNotes) window.onSelectedNotes(); })();`, null);
   }
 
+  static _handleGetLiteratureNotesList(self) {
+    const targetWindow = (self.addon && self.addon.window) ? self.addon.window : self.addonWindow;
+    let list = [];
+    if (targetWindow && typeof getNotebookLiteratureNotes === 'function') {
+      try { list = getNotebookLiteratureNotes(targetWindow); } catch (e) { list = []; }
+    }
+    const jsonStr = JSON.stringify(list);
+    const esc = jsonStr.replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/\r/g, '').replace(/\n/g, '\\n');
+    self.webView.evaluateJavaScript(`(function(){ try { window.__literatureNotes = JSON.parse('${esc}'); } catch (_) { window.__literatureNotes = []; } if (window.onLiteratureNotesList) window.onLiteratureNotesList(); })();`, null);
+  }
+
   static _handleExportLiteratureNotes(self, queryString) {
     const params = SZZoteroBridge._parseQueryString(queryString);
     const validated = SZZoteroBridge._validateExportParams(self, params, true);
@@ -885,6 +907,38 @@ var SZZoteroBridge = class {
       Application.sharedInstance().showHUD(t('no_literature_cards_selected'), self.view, 2);
       return;
     }
+    SZZoteroBridge._syncLiteratureTargets(self, targets, {
+      uid: validated.uid,
+      key: validated.key
+    });
+  }
+
+  static _handleExportCheckedLiteratureNotes(self, queryString) {
+    const params = SZZoteroBridge._parseQueryString(queryString);
+    const validated = SZZoteroBridge._validateExportParams(self, params, false);
+    if (!validated.ok) return;
+
+    const payload = SZZoteroBridge._decodeJsonParam(params.payload, []);
+    const inputList = Array.isArray(payload) ? payload : [];
+    const targets = [];
+    const seen = {};
+    for (let i = 0; i < inputList.length; i++) {
+      const item = inputList[i];
+      if (!item) continue;
+      const noteId = item.noteId ? String(item.noteId).trim() : '';
+      const itemKey = item.itemKey ? String(item.itemKey).trim() : '';
+      if (!noteId || !itemKey) continue;
+      const uniq = noteId + '::' + itemKey;
+      if (seen[uniq]) continue;
+      seen[uniq] = true;
+      targets.push({ noteId, itemKey });
+    }
+
+    if (targets.length === 0) {
+      Application.sharedInstance().showHUD(t('no_literature_cards_selected'), self.view, 2);
+      return;
+    }
+
     SZZoteroBridge._syncLiteratureTargets(self, targets, {
       uid: validated.uid,
       key: validated.key

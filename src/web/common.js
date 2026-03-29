@@ -452,7 +452,7 @@ var FIELD_LABELS_ZH = {
     repository: '资料库',
     repositoryLocation: '资料库位置',
     format: '格式',
-    citationKey: '引用键',
+    citationKey: '引用关键词',
     dictionaryTitle: '词典标题',
     subject: '主题',
     encyclopediaTitle: '百科标题',

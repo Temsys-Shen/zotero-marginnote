@@ -151,6 +151,11 @@ body {
     overflow-y: auto;
 }
 
+#settings-section-api {
+    padding: 4px;
+    box-sizing: border-box;
+}
+
 .settings-section-title {
     margin: 0 0 10px;
     font-size: 15px;
@@ -1572,8 +1577,7 @@ select:focus {
     display: none;
     flex: 1;
     flex-direction: column;
-    overflow-y: auto;
-    -webkit-overflow-scrolling: touch;
+    overflow: hidden;
     padding: 16px;
     gap: 12px;
     min-height: 0;
@@ -1581,6 +1585,13 @@ select:focus {
 
 #selected-panel.show {
     display: flex;
+}
+
+#selected-list {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
 }
 
 .selected-empty-state {
@@ -1597,6 +1608,8 @@ select:focus {
     flex-shrink: 0;
     border-bottom: 1px solid var(--border);
     margin-bottom: 8px;
+    align-items: center;
+    flex-wrap: wrap;
 }
 
 .selected-toolbar button {
@@ -1637,10 +1650,19 @@ select:focus {
     border: 1px solid var(--accent);
 }
 
-/* Refresh Button - Green style (iOS-style) */
-#btn-refresh {
-    background: var(--green);
-    color: var(--surface);
+#btn-select-all,
+#btn-invert,
+#btn-select-current {
+    background: var(--surface);
+    color: var(--text);
+    border: 1px solid var(--border);
+}
+
+.selected-counter {
+    margin-left: auto;
+    font-size: 12px;
+    color: var(--sub);
+    font-weight: 600;
 }
 
 #btn-copy-reference:disabled {
