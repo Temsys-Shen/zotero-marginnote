@@ -590,6 +590,16 @@
             return 'mnzotero://createNote?' + q.join('&');
         }
 
+        function buildPdfLinks(slug, attachmentKey) {
+            var safeSlug = slug || 'user';
+            var safeAttachmentKey = attachmentKey || '';
+            if (!safeAttachmentKey) return { linkPdf: '', linkCloudPdf: '' };
+            return {
+                linkPdf: 'zotero://open-pdf/library/items/' + safeAttachmentKey,
+                linkCloudPdf: 'https://www.zotero.org/' + safeSlug + '/items/' + safeAttachmentKey + '/file'
+            };
+        }
+
         function buildDownloadPdfUrl(uid, attachmentKey, title, apiKey, requestId) {
             var q = [
                 'uid=' + encodeURIComponent(uid || ''),
@@ -900,6 +910,14 @@
                     eyePayload[pdf] = pdfFilename;
                     sendMNProtocol('mnzotero://checkDocuments?payload=' + encodeURIComponent(JSON.stringify(eyePayload)));
 
+                    var links = buildPdfLinks(slug, pdf);
+                    var author = (d.creators && d.creators[0] && (d.creators[0].lastName || d.creators[0].name)) || T('unknown');
+                    var lItem = 'zotero://select/library/items/' + d.key;
+                    var cItem = 'https://www.zotero.org/' + (slug || 'user') + '/items/' + d.key;
+                    var refreshedCreateUrl = buildCreateNoteUrl((d.title || T('Untitled')), d.itemType, (d.date || '').substring(0, 4), author, lItem, links.linkPdf, cItem, links.linkCloudPdf, d.key, 'C', uid, key, d, getFieldTemplates());
+                    var addBtn = actionContainer.querySelector('.add-to-mn-btn:not(.download-pdf-btn)');
+                    if (addBtn) addBtn.href = refreshedCreateUrl;
+
                     // Now check for annotations under this PDF
                     var r_annos = await smartFetch(base + '/items/' + pdf + '/children?itemType=annotation&limit=1', { forceCloud: true });
                     if (r_annos.ok) {
@@ -934,6 +952,18 @@
                 nextEntry.hasPdfAnnotations = !!hasPdfAnnotations;
                 nextEntry.attachmentKey = attachmentKey || '';
                 nextEntry.pdfFilename = pdfFilename || '';
+                if (hasPdf && attachmentKey) {
+                    var links = buildPdfLinks(slug, attachmentKey);
+                    var author = (d.creators && d.creators[0] && (d.creators[0].lastName || d.creators[0].name)) || T('unknown');
+                    var lItem = 'zotero://select/library/items/' + d.key;
+                    var cItem = 'https://www.zotero.org/' + (slug || 'user') + '/items/' + d.key;
+                    var refreshedCreateUrl = buildCreateNoteUrl((d.title || T('Untitled')), d.itemType, (d.date || '').substring(0, 4), author, lItem, links.linkPdf, cItem, links.linkCloudPdf, d.key, 'C', uid, key, d, getFieldTemplates());
+                    nextEntry.createNoteQuery = refreshedCreateUrl.indexOf('?') > -1 ? refreshedCreateUrl.split('?')[1] : '';
+                    if (actionContainer) {
+                        var addBtn = actionContainer.querySelector('.add-to-mn-btn:not(.download-pdf-btn)');
+                        if (addBtn) addBtn.href = refreshedCreateUrl;
+                    }
+                }
                 if (listItem) {
                     listItem.setAttribute('data-favorite-entry', encodeURIComponent(JSON.stringify(nextEntry)));
                 }

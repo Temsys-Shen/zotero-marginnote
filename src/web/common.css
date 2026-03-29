@@ -381,6 +381,12 @@ select:focus {
     transform: translateY(-50%) translateX(0);
 }
 
+.tooltip-container.show-tooltip .tooltip-text {
+    visibility: visible;
+    opacity: 1;
+    transform: translateY(-50%) translateX(0);
+}
+
 #settings-local-status-label {
     text-decoration: underline dotted;
     text-decoration-color: #888;

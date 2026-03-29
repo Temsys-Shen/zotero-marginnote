@@ -234,6 +234,32 @@
                 });
             });
         })();
+
+        (function initLocalStatusTooltip() {
+            var container = document.getElementById('local-status-container');
+            if (!container) return;
+            var toggle = function(e) {
+                if (e) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                }
+                var opened = container.classList.contains('show-tooltip');
+                if (opened) container.classList.remove('show-tooltip');
+                else container.classList.add('show-tooltip');
+            };
+
+            container.addEventListener('click', toggle);
+            container.addEventListener('touchstart', toggle, { passive: false });
+
+            document.addEventListener('click', function(e) {
+                if (!container.classList.contains('show-tooltip')) return;
+                if (!container.contains(e.target)) container.classList.remove('show-tooltip');
+            });
+            document.addEventListener('touchstart', function(e) {
+                if (!container.classList.contains('show-tooltip')) return;
+                if (!container.contains(e.target)) container.classList.remove('show-tooltip');
+            }, { passive: true });
+        })();
     </script>
 </body>
 

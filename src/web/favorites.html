@@ -101,11 +101,14 @@
             var uid = entry && entry.uid ? String(entry.uid) : String((window.__mnConfig && window.__mnConfig.uid) || '0');
             var key = entry && entry.apiKey ? String(entry.apiKey) : String((window.__mnConfig && window.__mnConfig.key) || '');
             var slug = entry && entry.slug ? String(entry.slug) : String((window.__mnConfig && window.__mnConfig.slug) || '');
+            var attachmentKey = entry && entry.attachmentKey ? String(entry.attachmentKey) : '';
             var creators = Array.isArray(d.creators) ? d.creators : [];
             var firstCreator = creators.length ? creators[0] : null;
             var author = (firstCreator && (firstCreator.lastName || firstCreator.name)) || T('unknown');
             var lItem = 'zotero://select/library/items/' + (entry.itemKey || '');
             var cItem = 'https://www.zotero.org/' + (slug || 'user') + '/items/' + (entry.itemKey || '');
+            var linkPdf = attachmentKey ? ('zotero://open-pdf/library/items/' + attachmentKey) : '';
+            var linkCloudPdf = attachmentKey ? ('https://www.zotero.org/' + (slug || 'user') + '/items/' + attachmentKey + '/file') : '';
             var q = [
                 'title=' + encodeURIComponent(d.title || T('Untitled')),
                 'type=' + encodeURIComponent(d.itemType || ''),
@@ -118,6 +121,8 @@
                 'key=' + encodeURIComponent(key),
                 'lW=' + encodeURIComponent(cItem)
             ];
+            if (linkPdf) q.push('lP=' + encodeURIComponent(linkPdf));
+            if (linkCloudPdf) q.push('lC=' + encodeURIComponent(linkCloudPdf));
             return 'mnzotero://createNote?' + q.join('&');
         }
 

@@ -702,6 +702,7 @@ var SZZoteroBridge = class {
       }
 
       let cardCreated = false;
+      let postItemDelay = 0;
       if (options.card) {
         if (item.createNoteQuery) {
           try {
@@ -721,6 +722,7 @@ var SZZoteroBridge = class {
           try {
             SZZoteroBridge._handleOpenDocument(self, 'docMd5=' + encodeURIComponent(item.docMd5));
             result.success += 1;
+            postItemDelay = 0.5;
           } catch (e) {
             result.failed += 1;
           }
@@ -729,21 +731,31 @@ var SZZoteroBridge = class {
         }
       }
 
+      const scheduleNext = () => {
+        if (postItemDelay > 0) {
+          NSTimer.scheduledTimerWithTimeInterval(postItemDelay, false, function () {
+            processNext();
+          });
+          return;
+        }
+        processNext();
+      };
+
       const runAnnotation = () => {
         if (!options.annotation) {
-          processNext();
+          scheduleNext();
           return;
         }
 
         if (options.card && !cardCreated) {
           result.skipped += 1;
-          processNext();
+          scheduleNext();
           return;
         }
 
         if (!item.attachmentKey || !item.itemKey) {
           result.skipped += 1;
-          processNext();
+          scheduleNext();
           return;
         }
 
@@ -762,7 +774,7 @@ var SZZoteroBridge = class {
         } catch (e) {
           result.failed += 1;
         }
-        processNext();
+        scheduleNext();
       };
 
       // Ensure annotation import starts after card creation settles in UI/DB.
@@ -921,25 +933,27 @@ var SZZoteroBridge = class {
     if (!targetWindow) return;
 
     const studyController = Application.sharedInstance().studyController(targetWindow);
-    const notebookId = (studyController.notebookController && (studyController.notebookController.currTopic || studyController.notebookController.topicId)) || self.currentNotebookId;
-    if (!notebookId) return;
-
-    const db = Database.sharedInstance();
-    const notebook = db.getNotebookById(notebookId);
-    if (!notebook) return;
-    const doc = (notebook.documents && notebook.documents.length > 0) ? notebook.documents[0] : (notebook.mainDocMd5 ? db.getDocumentById(notebook.mainDocMd5) : undefined);
-    if (!doc) {
+    const resolved = SZZoteroBridge._resolveCreateTargetContext(self, studyController);
+    if (!resolved || !resolved.ok) return;
+    const notebook = resolved.notebook;
+    const doc = resolved.document;
+    const topicId = resolved.topicId;
+    const parentNote = resolved.parentNote;
+    if (!doc || !notebook) {
       Application.sharedInstance().showHUD(t('please_open_a_document_first'), self.view, 2);
       return;
     }
 
-    const topicId = notebook.topicId || notebook.topicid;
     let newNote = undefined;
     UndoManager.sharedInstance().undoGrouping("Create Note", topicId, () => {
       try {
         const createdNote = Note.createWithTitleNotebookDocument(params.title, notebook, doc);
         newNote = createdNote;
         if (!createdNote) return;
+
+        if (parentNote) {
+          parentNote.addChild(createdNote);
+        }
 
         const templatesHtml = SZZoteroBridge._getTemplatesHtml(params);
         const body = SZZoteroBridge._buildNoteBody(params, templatesHtml);
@@ -963,6 +977,107 @@ var SZZoteroBridge = class {
     } else if (newNote) {
       Application.sharedInstance().showHUD(t('card_created'), self.view, 1.5);
     }
+  }
+
+  static _resolveCreateTargetContext(self, studyController) {
+    if (!studyController) {
+      Application.sharedInstance().showHUD(t('please_open_a_document_first'), self.view, 2);
+      return { ok: false };
+    }
+    const db = Database.sharedInstance();
+    const notebookController = studyController.notebookController;
+    const fromTopicId = notebookController && notebookController.topicId ? String(notebookController.topicId).trim() : '';
+    const fromNotebookId = notebookController && notebookController.notebookId ? String(notebookController.notebookId).trim() : '';
+    const fromCached = self && self.currentNotebookId ? String(self.currentNotebookId).trim() : '';
+    const notebookId = fromTopicId || fromNotebookId || fromCached;
+    if (!notebookId) {
+      Application.sharedInstance().showHUD(t('please_open_a_document_first'), self.view, 2);
+      return { ok: false };
+    }
+
+    const notebook = db.getNotebookById(notebookId);
+    if (!notebook) {
+      Application.sharedInstance().showHUD(t('please_open_a_document_first'), self.view, 2);
+      return { ok: false };
+    }
+
+    const readerController = studyController.readerController;
+    const docController = readerController ? readerController.currentDocumentController : null;
+    let document = docController ? docController.document : null;
+    if (!document) {
+      const docMd5 = docController && docController.docMd5 ? String(docController.docMd5).trim() : '';
+      if (docMd5) document = db.getDocumentById(docMd5);
+    }
+    if (!document && notebook.mainDocMd5) {
+      document = db.getDocumentById(String(notebook.mainDocMd5));
+    }
+    if (!document && notebook.documents && notebook.documents.length > 0) {
+      document = notebook.documents[0];
+    }
+    if (!document) {
+      Application.sharedInstance().showHUD(t('please_open_a_document_first'), self.view, 2);
+      return { ok: false };
+    }
+
+    const selectedNote = SZZoteroBridge._getFirstSelectedNote(studyController);
+    const parentNote = SZZoteroBridge._resolveCreateParentNote(selectedNote);
+    const topicId = notebook.topicId || notebook.topicid;
+    return { ok: true, notebook: notebook, document: document, topicId: topicId, parentNote: parentNote };
+  }
+
+  static _getFirstSelectedNote(studyController) {
+    if (!studyController || !studyController.notebookController) return null;
+    const nc = studyController.notebookController;
+    const mindmapView = nc.mindmapView || nc.mindMapView || nc.noteMindMap;
+    if (!mindmapView) return null;
+    const selViewLst = mindmapView.selViewLst;
+    if (!selViewLst) return null;
+
+    const count = selViewLst.length !== undefined
+      ? selViewLst.length
+      : (typeof selViewLst.count === 'function' ? selViewLst.count() : (selViewLst.count !== undefined ? selViewLst.count : 0));
+    if (!count) return null;
+
+    const first = selViewLst.objectAtIndex ? selViewLst.objectAtIndex(0) : selViewLst[0];
+    if (!first) return null;
+    const node = first.note !== undefined ? first.note : first;
+    const note = node && node.note !== undefined ? node.note : node;
+    if (!note || !note.noteId) return null;
+    return note;
+  }
+
+  static _resolveCreateParentNote(selectedNote) {
+    if (!selectedNote) return null;
+    if (!SZZoteroBridge._isLiteratureNote(selectedNote)) return selectedNote;
+    const parentNote = selectedNote.parentNote;
+    if (parentNote && parentNote.noteId) return parentNote;
+    return null;
+  }
+
+  static _isLiteratureNote(note) {
+    const zoteroItemRe = /zotero:\/\/select\/library\/items(?:\/|\?itemKey=)([^"'\s&\/>]+)/;
+    return !!SZZoteroBridge._extractItemKeyFromNote(note, zoteroItemRe);
+  }
+
+  static _extractItemKeyFromNote(note, re) {
+    if (!note || !re) return '';
+    const comments = note.comments;
+    if (!comments) return '';
+    const cnt = comments.length !== undefined
+      ? comments.length
+      : (typeof comments.count === 'function' ? comments.count() : (comments.count !== undefined ? comments.count : 0));
+    if (!cnt) return '';
+    for (let j = 0; j < cnt; j++) {
+      const c = comments.objectAtIndex ? comments.objectAtIndex(j) : comments[j];
+      if (!c) continue;
+      let raw = '';
+      if (c.html !== undefined) raw = (typeof c.html === 'function' ? c.html() : c.html) || '';
+      if (!raw && c.text !== undefined) raw = (typeof c.text === 'function' ? c.text() : c.text) || '';
+      if (!raw) continue;
+      const m = String(raw).match(re);
+      if (m && m[1]) return String(m[1]);
+    }
+    return '';
   }
 
   static _getTemplatesHtml(params) {
