@@ -1,6 +1,6 @@
 {
   "name": "zotero-mnaddon",
-  "version": "1.0.0-beta",
+  "version": "1.0.0-beta2",
   "private": true,
   "scripts": {
     "build": "node scripts/build-release.js",
