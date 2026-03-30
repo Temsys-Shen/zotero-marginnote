@@ -2,7 +2,7 @@
   "addonid": "top.museday.mn.zotero",
   "author": "ShenShichao",
   "title": "Zotero Connector",
-  "version": "1.0.0-rc1",
+  "version": "1.0.0-rc2",
   "marginnote_version_min": "4.2.3",
   "cert_key": ""
 }

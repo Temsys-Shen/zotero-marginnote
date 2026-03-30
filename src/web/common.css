@@ -846,6 +846,30 @@ select:focus {
     border-bottom: 1px solid var(--border);
 }
 
+.list-item.is-selected {
+    background: var(--accent-bg);
+    box-shadow: inset 0 0 0 1px var(--accent);
+    border-radius: 10px;
+    border-bottom-color: transparent;
+    margin: 2px 6px;
+}
+
+.list-item.is-selected .list-title {
+    color: var(--accent);
+}
+
+.list-item.is-selected + .list-item.is-selected {
+    margin-top: 0;
+}
+
+.list-item:not(.is-selected) + .list-item.is-selected {
+    margin-top: 6px;
+}
+
+.list-item.is-selected + .list-item:not(.is-selected) {
+    margin-bottom: 6px;
+}
+
 .list-item:last-child {
     border-bottom: none;
 }
@@ -1687,7 +1711,18 @@ select:focus {
     box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.22) inset;
 }
 
+.batch-import-group button:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+}
+
 #btn-batch-import {
+    background: var(--accent);
+    color: var(--surface);
+    border-radius: 8px 0 0 8px;
+}
+
+#library-batch-import {
     background: var(--accent);
     color: var(--surface);
     border-radius: 8px 0 0 8px;
@@ -1703,8 +1738,23 @@ select:focus {
     font-size: 16px;
 }
 
+#library-batch-options {
+    min-width: 30px;
+    padding: 0 8px;
+    background: var(--accent);
+    color: var(--surface);
+    border-radius: 0 8px 8px 0;
+    border-left: 1px solid rgba(255, 255, 255, 0.35);
+    font-size: 16px;
+}
+
 #btn-batch-import:hover,
 #btn-batch-options:hover {
+    filter: brightness(1.04);
+}
+
+#library-batch-import:hover,
+#library-batch-options:hover {
     filter: brightness(1.04);
 }
 
