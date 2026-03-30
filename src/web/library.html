@@ -94,7 +94,7 @@
                             </div>
                             </div>
                         </div>
-                        <button id="library-clear-selection" class="toolbar-btn secondary" type="button" disabled></button>
+                        <button id="library-clear-selection" class="toolbar-btn" type="button" disabled></button>
                         <div class="batch-import-group">
                             <button id="library-batch-import" class="toolbar-btn" type="button" disabled></button>
                             <button id="library-batch-options" class="toolbar-btn" type="button">▾</button>
@@ -478,6 +478,8 @@
 
         function getSortOptions() {
             return [
+                { key: 'added_desc', label: T('sort_added_desc') },
+                { key: 'added_asc', label: T('sort_added_asc') },
                 { key: 'year_desc', label: T('sort_year_desc') },
                 { key: 'year_asc', label: T('sort_year_asc') },
                 { key: 'title_asc', label: T('sort_title_asc') },
@@ -499,6 +501,13 @@
             return Number.isFinite(parsed) ? parsed : 0;
         }
 
+        function extractTimestamp(rawDateTime) {
+            var text = String(rawDateTime || '').trim();
+            if (!text) return 0;
+            var parsed = Date.parse(text);
+            return Number.isFinite(parsed) ? parsed : 0;
+        }
+
         function getLibraryItemMeta(item) {
             var data = item && item.data ? item.data : {};
             var creators = Array.isArray(data.creators) ? data.creators : [];
@@ -512,6 +521,7 @@
                 author: String(author || ''),
                 authorLower: String(author || '').toLowerCase(),
                 year: year,
+                dateAddedTs: extractTimestamp(data.dateAdded || ''),
                 itemType: String(data.itemType || ''),
                 hasTag: tags.length > 0,
                 hasDoi: !!String(data.DOI || '').trim()
@@ -535,6 +545,12 @@
             sorted.sort(function(a, b) {
                 var am = a.meta;
                 var bm = b.meta;
+                if (sortKey === 'added_asc') {
+                    return (am.dateAddedTs || 0) - (bm.dateAddedTs || 0) || am.titleLower.localeCompare(bm.titleLower);
+                }
+                if (sortKey === 'added_desc') {
+                    return (bm.dateAddedTs || 0) - (am.dateAddedTs || 0) || am.titleLower.localeCompare(bm.titleLower);
+                }
                 if (sortKey === 'year_asc') {
                     return (am.year || 0) - (bm.year || 0) || am.titleLower.localeCompare(bm.titleLower);
                 }
@@ -563,7 +579,7 @@
         function updateLibraryControlText() {
             var state = window.MNLibraryControls || {};
             var sortBtn = $('sort-trigger');
-            if (sortBtn) sortBtn.textContent = T('sort_button') + '·' + getSortLabel(state.sort || 'year_desc');
+            if (sortBtn) sortBtn.textContent = T('sort_button');
             var filterBtn = $('filter-trigger');
             if (filterBtn) {
                 var filters = state.filters || {};
@@ -1701,6 +1717,14 @@
             var base = '/users/' + uid;
             var path = collectionKey ? base + '/collections/' + collectionKey + '/items/top' : base + '/items/top';
             var params = ['limit=100'];
+            var sortKey = window.MNLibraryControls && window.MNLibraryControls.sort ? String(window.MNLibraryControls.sort) : 'year_desc';
+            if (sortKey === 'added_desc') {
+                params.push('sort=' + encodeURIComponent('dateAdded'));
+                params.push('direction=' + encodeURIComponent('desc'));
+            } else if (sortKey === 'added_asc') {
+                params.push('sort=' + encodeURIComponent('dateAdded'));
+                params.push('direction=' + encodeURIComponent('asc'));
+            }
             if (q) params.push('q=' + encodeURIComponent(q));
             for (var ti = 0; ti < selectedTags.length; ti++) { params.push('tag=' + encodeURIComponent(selectedTags[ti])); }
             var url = path + (params.length ? ('?' + params.join('&')) : '');

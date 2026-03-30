@@ -560,14 +560,18 @@ select:focus {
 .library-toolbar {
     display: flex;
     justify-content: space-between;
-    align-items: center;
+    align-items: flex-start;
+    gap: 8px 12px;
     margin-top: 10px;
     margin-bottom: 2px;
 }
 
 .toolbar-left {
     display: flex;
+    flex-wrap: wrap;
+    align-items: center;
     gap: 10px;
+    min-width: 0;
 }
 
 .dropdown-wrapper {
@@ -598,6 +602,14 @@ select:focus {
     background: var(--input-bg);
 }
 
+#library-clear-selection:disabled {
+    opacity: 1;
+    background: var(--input-bg);
+    color: var(--sub);
+    border-color: var(--border);
+    cursor: not-allowed;
+}
+
 .toolbar-btn:hover {
     background: var(--input-bg);
 }
@@ -613,6 +625,7 @@ select:focus {
     color: var(--sub);
     font-size: 12px;
     white-space: nowrap;
+    align-self: center;
 }
 
 .active-filter-summary {
