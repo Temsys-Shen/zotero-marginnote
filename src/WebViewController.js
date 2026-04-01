@@ -835,7 +835,8 @@ var SZZoteroBridge = class {
   }
 
   static _validateExportParams(self, params, requireTarget) {
-    const mode = params.mode ? String(params.mode).trim() : '';
+    const rawMode = params.mode ? String(params.mode).trim() : '';
+    const mode = rawMode ? rawMode.toUpperCase() : 'C';
     const uid = params.uid ? String(params.uid).trim() : '';
     const key = params.key ? String(params.key).trim() : '';
     const noteId = params.noteId ? String(params.noteId).trim() : '';

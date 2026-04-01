@@ -103,11 +103,9 @@
 
         function getSyncConfig() {
             var cfg = window.__mnConfig || {};
-            var mode = $('mode') ? $('mode').value : (cfg.mode || 'L');
             var uid = $('uid') ? String($('uid').value || '').trim() : String(cfg.uid || '').trim();
             var key = $('key') ? String($('key').value || '').trim() : String(cfg.key || '').trim();
-            mode = mode ? String(mode).trim() : 'L';
-            return { mode: mode, uid: uid, key: key };
+            return { mode: 'C', uid: uid, key: key };
         }
 
         // Auto-load on page load
