@@ -80,6 +80,7 @@
         var __mnFavoritesResolver = null;
         var __mnDownloadPending = {};
         var __mnSeq = 0;
+        var __mnFavoriteAttachmentHydrationTasks = {};
         var tagModalMode = 'edit';
         var touchDragState = null;
 
@@ -282,6 +283,14 @@
             return null;
         }
 
+        function isPdfAttachmentItem(item) {
+            if (!item || !item.data) return false;
+            if (item.data.itemType !== 'attachment') return false;
+            var contentType = String(item.data.contentType || '').toLowerCase();
+            var filename = String(item.data.filename || '').toLowerCase();
+            return contentType === 'application/pdf' || filename.endsWith('.pdf');
+        }
+
         function filterFavorites() {
             if (favoriteState.filterType === 'all') return favoriteState.items.slice();
             if (favoriteState.filterType === 'untagged') {
@@ -457,8 +466,34 @@
                 if (!row) continue;
                 var actionContainer = row.querySelector('.list-item-actions');
                 layoutActionButtons(actionContainer);
-                hydrateFavoriteAttachments(entry, actionContainer);
+                queueFavoriteAttachmentHydration(entry, actionContainer);
             }
+        }
+
+        function queueFavoriteAttachmentHydration(entry, actionContainer) {
+            if (!entry || !entry.itemKey) return Promise.resolve(entry || null);
+            var key = String(entry.itemKey || '');
+            if (__mnFavoriteAttachmentHydrationTasks[key]) return __mnFavoriteAttachmentHydrationTasks[key];
+            var task = hydrateFavoriteAttachments(entry, actionContainer).then(function(updatedEntry) {
+                return updatedEntry || findFavoriteByItemKey(key);
+            }).finally(function() {
+                delete __mnFavoriteAttachmentHydrationTasks[key];
+            });
+            __mnFavoriteAttachmentHydrationTasks[key] = task;
+            return task;
+        }
+
+        function ensureFavoriteEntryReadyForCreate(itemKey) {
+            var key = String(itemKey || '');
+            if (!key) return Promise.resolve(null);
+            var entry = findFavoriteByItemKey(key);
+            if (!entry) return Promise.resolve(null);
+            if (entry.attachmentKey) return Promise.resolve(entry);
+            if (__mnFavoriteAttachmentHydrationTasks[key]) return __mnFavoriteAttachmentHydrationTasks[key];
+            var row = document.querySelector('.favorite-list-item[data-item-key="' + key + '"]');
+            if (!row) return Promise.resolve(entry);
+            var actionContainer = row.querySelector('.list-item-actions');
+            return queueFavoriteAttachmentHydration(entry, actionContainer);
         }
 
         async function hydrateFavoriteAttachments(entry, actionContainer) {
@@ -471,19 +506,24 @@
                 var rKids = await smartFetch(base + '/items/' + entry.itemKey + '/children', { forceCloud: true });
                 if (!rKids.ok) return;
                 var kids = await rKids.json();
-                var pdfItem = kids.find(function(k) { return k.data && k.data.itemType === 'attachment' && (k.data.contentType === 'application/pdf' || (k.data.filename || '').endsWith('.pdf')); });
+                var pdfItem = kids.find(isPdfAttachmentItem);
                 if (!pdfItem) {
                     entry.hasPdf = false;
                     entry.hasPdfAnnotations = false;
                     entry.attachmentKey = '';
+                    entry.pdfFilename = '';
+                    if (actionContainer) {
+                        var emptyAddBtn = actionContainer.querySelector('.add-to-mn-btn:not(.download-pdf-btn)');
+                        if (emptyAddBtn) emptyAddBtn.href = buildCreateNoteUrl(entry);
+                    }
                     persistFavoriteEntry(entry);
-                    return;
+                    return entry;
                 }
 
                 var attachmentKey = String(pdfItem.data.key || '');
                 var pdfFilename = String(pdfItem.data.filename || d.title || T('Untitled'));
                 var safeKey = String(apiKey || '').replace(/"/g, '&quot;');
-                var dlBtnHtml = '<a href="#" class="add-to-mn-btn download-pdf-btn" title="' + T('download_pdf') + '" data-uid="' + escapeHtml(uid) + '" data-attachment-key="' + escapeHtml(attachmentKey) + '" data-file-name="' + escapeHtml(pdfFilename) + '" data-api-key="' + safeKey + '">' + buildDownloadPdfIcon() + '</a>';
+                var dlBtnHtml = '<a href="#" class="add-to-mn-btn download-pdf-btn" title="' + T('download_pdf') + '" data-uid="' + escapeHtml(uid) + '" data-item-key="' + escapeHtml(String(entry.itemKey || '')) + '" data-attachment-key="' + escapeHtml(attachmentKey) + '" data-file-name="' + escapeHtml(pdfFilename) + '" data-api-key="' + safeKey + '">' + buildDownloadPdfIcon() + '</a>';
                 var eyeBtnHtml = '<button class="open-in-mn-btn loading" data-item-key="' + escapeHtml(String(entry.itemKey)) + '" data-attachment-key="' + escapeHtml(attachmentKey) + '" title="Open in MarginNote"></button>';
                 insertActionButtonsBeforeAdd(actionContainer, dlBtnHtml + eyeBtnHtml);
                 layoutActionButtons(actionContainer);
@@ -509,9 +549,15 @@
                 entry.hasPdfAnnotations = hasAnno;
                 entry.attachmentKey = attachmentKey;
                 entry.pdfFilename = pdfFilename;
+                if (actionContainer) {
+                    var addBtn = actionContainer.querySelector('.add-to-mn-btn:not(.download-pdf-btn)');
+                    if (addBtn) addBtn.href = buildCreateNoteUrl(entry);
+                }
                 persistFavoriteEntry(entry);
+                return entry;
             } catch (e) {
                 console.log('hydrate favorite attachments failed: ' + e);
+                return entry;
             }
         }
 
@@ -672,10 +718,13 @@
             }
         }
 
-        function runBatchImport() {
+        async function runBatchImport() {
             var keys = getSelectedItemKeys();
             if (!keys.length) return;
             syncBatchOptionState();
+            await Promise.all(keys.map(function(key) {
+                return ensureFavoriteEntryReadyForCreate(key);
+            }));
             var items = keys.map(function(key) {
                 var entry = findFavoriteByItemKey(key);
                 if (!entry) return null;
@@ -831,11 +880,32 @@
                     return;
                 }
 
+                var addBtn = event.target.closest('.add-to-mn-btn:not(.download-pdf-btn)');
+                if (addBtn) {
+                    event.preventDefault();
+                    if (addBtn.getAttribute('data-creating') === '1') return;
+                    addBtn.setAttribute('data-creating', '1');
+                    var runCreate = async function() {
+                        try {
+                            var row = addBtn.closest('.favorite-list-item');
+                            var itemKey = row ? String(row.getAttribute('data-item-key') || '') : '';
+                            var readyEntry = itemKey ? await ensureFavoriteEntryReadyForCreate(itemKey) : null;
+                            var createUrl = readyEntry ? buildCreateNoteUrl(readyEntry) : (addBtn.getAttribute('href') || '');
+                            if (createUrl) sendMNProtocol(createUrl);
+                        } finally {
+                            addBtn.removeAttribute('data-creating');
+                        }
+                    };
+                    runCreate();
+                    return;
+                }
+
                 var downloadBtn = event.target.closest('.download-pdf-btn');
                 if (downloadBtn) {
                     event.preventDefault();
                     if (downloadBtn.classList.contains('is-downloading')) return;
                     var uid = downloadBtn.getAttribute('data-uid') || '';
+                    var itemKey = downloadBtn.getAttribute('data-item-key') || '';
                     var attachmentKey = downloadBtn.getAttribute('data-attachment-key') || '';
                     var fileName = downloadBtn.getAttribute('data-file-name') || 'Untitled';
                     var apiKey = downloadBtn.getAttribute('data-api-key') || '';
@@ -855,6 +925,7 @@
                         'fileName=' + encodeURIComponent(fileName),
                         'requestId=' + encodeURIComponent(requestId)
                     ];
+                    if (itemKey) query.push('itemKey=' + encodeURIComponent(itemKey));
                     if (apiKey) query.push('key=' + encodeURIComponent(apiKey));
                     sendMNProtocol('mnzotero://downloadPdf?' + query.join('&'));
                     return;
@@ -864,7 +935,12 @@
                 if (eyeBtn && !eyeBtn.classList.contains('loading')) {
                     event.preventDefault();
                     var docMd5 = eyeBtn.dataset.docMd5;
-                    if (docMd5) sendMNProtocol('mnzotero://openDocument?docMd5=' + encodeURIComponent(docMd5));
+                    var itemKey = eyeBtn.getAttribute('data-item-key') || '';
+                    if (docMd5) {
+                        var q = ['docMd5=' + encodeURIComponent(docMd5)];
+                        if (itemKey) q.push('itemKey=' + encodeURIComponent(itemKey));
+                        sendMNProtocol('mnzotero://openDocument?' + q.join('&'));
+                    }
                     return;
                 }
 

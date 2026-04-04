@@ -9,9 +9,11 @@ JSB.newAddon = function (mainPath) {
   JSB.require('MNTreeExportService');
   JSB.require('ZoteroNoteSyncService');
   JSB.require('AnnotationImportService');
+  JSB.require('LiteratureCardActionBar');
   var newAddonClass = JSB.defineClass('SZSampleWAddon : JSExtension', /*Instance members*/{
     //Window initialize
     sceneWillConnect: function () {
+      self._mnZoteroActionLinkMap = {};
       self.layoutViewController = function () {
         var minWidth = 400;
         var savedConfig = NSUserDefaults.standardUserDefaults().objectForKey('mn_zotero_frame_config');
@@ -47,6 +49,7 @@ JSB.newAddon = function (mainPath) {
     },
     //Window disconnect
     sceneDidDisconnect: function () {
+      SZLiteratureCardActionBar.stop(self);
     },
     //Window resign active
     sceneWillResignActive: function () {
@@ -57,6 +60,7 @@ JSB.newAddon = function (mainPath) {
     notebookWillOpen: function (notebookid) {
       self.webController.addon = self;
       self.webController.currentNotebookId = notebookid;
+      SZLiteratureCardActionBar.start(self);
       NSTimer.scheduledTimerWithTimeInterval(0.2, false, function () {
         var sample_on = NSUserDefaults.standardUserDefaults().objectForKey('marginnote_sample_w_on');
         if (sample_on == true) {// Not support in card deck mode
@@ -67,6 +71,7 @@ JSB.newAddon = function (mainPath) {
       });
     },
     notebookWillClose: function (notebookid) {
+      SZLiteratureCardActionBar.stop(self);
     },
     documentDidOpen: function (docmd5) {
     },
@@ -79,6 +84,7 @@ JSB.newAddon = function (mainPath) {
         if (!self.webController || !self.webController.view || self.webController.view.frame.width === 0) {
           self.layoutViewController();
         }
+        SZLiteratureCardActionBar.refresh(self);
       }
     },
     queryAddonCommandStatus: function () {
@@ -98,6 +104,31 @@ JSB.newAddon = function (mainPath) {
         });
       }
       Application.sharedInstance().studyController(self.window).refreshAddonCommands();
+    },
+    onLiteratureActionButtonTap: function (sender) {
+      const tag = sender && sender.tag !== undefined ? String(sender.tag) : '';
+      if (!tag) return;
+      const map = self._mnZoteroActionLinkMap || {};
+      const urlString = map[tag] ? String(map[tag]) : '';
+      if (!urlString) return;
+      if (urlString.indexOf('mnzoterodoc://') === 0) {
+        const docMd5 = urlString.substring('mnzoterodoc://'.length);
+        if (!docMd5) return;
+        const webController = self.webController || null;
+        if (!webController || typeof SZZoteroBridge === 'undefined' || !SZZoteroBridge._handleOpenDocument) return;
+        SZZoteroBridge._handleOpenDocument(webController, 'docMd5=' + encodeURIComponent(docMd5));
+        return;
+      }
+      try {
+        const nsUrl = NSURL.URLWithString(urlString);
+        Application.sharedInstance().openURL(nsUrl);
+      } catch (e) {
+        const msg = String((e && e.message) ? e.message : e);
+        console.log('open literature link failed: ' + msg + ', url=' + urlString);
+        if (self.webController && self.webController.view) {
+          Application.sharedInstance().showHUD('Open link failed: ' + msg, self.webController.view, 2);
+        }
+      }
     },
   }, /*Class members*/{
     addonDidConnect: function () {

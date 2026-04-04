@@ -491,6 +491,48 @@ var SZZoteroBridge = class {
     return 'mn_zotero_favorites_state_v1';
   }
 
+  static _itemDocMapStorageKey() {
+    return 'mn_zotero_item_docmd5_map_v1';
+  }
+
+  static _loadItemDocMap() {
+    const defaults = NSUserDefaults.standardUserDefaults();
+    const raw = defaults.objectForKey(SZZoteroBridge._itemDocMapStorageKey());
+    if (!raw) return {};
+    let parsed = raw;
+    if (typeof parsed === 'string') {
+      try {
+        parsed = JSON.parse(parsed);
+      } catch (e) {
+        return {};
+      }
+    }
+    if (!parsed || typeof parsed !== 'object') return {};
+    return parsed;
+  }
+
+  static _saveItemDocMap(map) {
+    const normalized = (map && typeof map === 'object') ? map : {};
+    NSUserDefaults.standardUserDefaults().setObjectForKey(JSON.stringify(normalized), SZZoteroBridge._itemDocMapStorageKey());
+  }
+
+  static _recordItemDocMd5(itemKey, docMd5) {
+    const key = itemKey ? String(itemKey).trim() : '';
+    const md5 = docMd5 ? String(docMd5).trim() : '';
+    if (!key || !md5) return;
+    const map = SZZoteroBridge._loadItemDocMap();
+    map[key] = md5;
+    SZZoteroBridge._saveItemDocMap(map);
+  }
+
+  static _getRecordedDocMd5ForItemKey(itemKey) {
+    const key = itemKey ? String(itemKey).trim() : '';
+    if (!key) return '';
+    const map = SZZoteroBridge._loadItemDocMap();
+    const md5 = map[key];
+    return md5 ? String(md5) : '';
+  }
+
   static _loadFavoritesState() {
     const defaults = NSUserDefaults.standardUserDefaults();
     const raw = defaults.objectForKey(SZZoteroBridge._favoritesStorageKey());
@@ -757,7 +799,7 @@ var SZZoteroBridge = class {
       if (options.pdf) {
         if (item.docMd5) {
           try {
-            SZZoteroBridge._handleOpenDocument(self, 'docMd5=' + encodeURIComponent(item.docMd5));
+            SZZoteroBridge._handleOpenDocument(self, 'docMd5=' + encodeURIComponent(item.docMd5) + '&itemKey=' + encodeURIComponent(item.itemKey || ''));
             result.success += 1;
             postItemDelay = 0.5;
           } catch (e) {
@@ -1259,6 +1301,7 @@ var SZZoteroBridge = class {
 
     const uid = params.uid ? String(params.uid) : '';
     const attachmentKey = params.attachmentKey ? String(params.attachmentKey) : '';
+    const itemKey = params.itemKey ? String(params.itemKey) : '';
     const requestId = params.requestId ? String(params.requestId) : '';
     if (!uid || !attachmentKey) {
       SZZoteroBridge._notifyDownloadResult(self.webView, requestId, false, 'missing-params');
@@ -1285,7 +1328,10 @@ var SZZoteroBridge = class {
       timeout: 45
     }).then((result) => {
       try {
-        SZZoteroBridge._importAndOpenDownloadedPdf(self, result && result.path ? result.path : '');
+        const imported = SZZoteroBridge._importAndOpenDownloadedPdf(self, result && result.path ? result.path : '');
+        if (imported && imported.docMd5 && itemKey) {
+          SZZoteroBridge._recordItemDocMd5(itemKey, imported.docMd5);
+        }
         SZZoteroBridge._notifyDownloadResult(self.webView, requestId, true, '');
       } catch (error) {
         const errorMsg = String((error && error.message) ? error.message : error);
@@ -1429,7 +1475,11 @@ var SZZoteroBridge = class {
   static _handleOpenDocument(self, queryString) {
     const params = SZZoteroBridge._parseQueryString(queryString);
     const docMd5 = params.docMd5 ? String(params.docMd5) : '';
+    const itemKey = params.itemKey ? String(params.itemKey) : '';
     if (!docMd5) return;
+    if (itemKey) {
+      SZZoteroBridge._recordItemDocMd5(itemKey, docMd5);
+    }
 
     try {
       const resolved = SZZoteroBridge._resolveCurrentNotebookId(self);
