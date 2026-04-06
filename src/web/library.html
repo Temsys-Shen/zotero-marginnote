@@ -1313,6 +1313,28 @@
             };
         }
 
+        function buildLibraryActionRowHtml(itemKey, slug, attachmentKey) {
+            var safeItemKey = String(itemKey || '');
+            var safeSlug = slug || 'user';
+            var lItem = 'zotero://select/library/items/' + safeItemKey;
+            var cItem = 'https://www.zotero.org/' + safeSlug + '/items/' + safeItemKey;
+            var html = '<a href="' + lItem + '" class="pill pill-zotero">' + T('open_in_zotero') + '</a>';
+            html += '<a href="' + cItem + '" target="_blank" class="pill pill-web">' + T('web') + '</a>';
+            if (attachmentKey) {
+                var links = buildPdfLinks(safeSlug, attachmentKey);
+                if (links.linkPdf) html += '<a href="' + links.linkPdf + '" class="pill pill-web">' + T('local_pdf') + '</a>';
+                if (links.linkCloudPdf) html += '<a href="' + links.linkCloudPdf + '" target="_blank" class="pill pill-web">' + T('cloud_pdf') + '</a>';
+            }
+            return html;
+        }
+
+        function updateLibraryActionRow(listItem, itemKey, slug, attachmentKey) {
+            if (!listItem) return;
+            var row = listItem.querySelector('.action-row');
+            if (!row) return;
+            row.innerHTML = buildLibraryActionRowHtml(itemKey, slug, attachmentKey);
+        }
+
         function buildDownloadPdfUrl(uid, attachmentKey, title, apiKey, requestId, itemKey) {
             var q = [
                 'uid=' + encodeURIComponent(uid || ''),
@@ -1353,15 +1375,28 @@
             return contentType === 'application/pdf' || filename.endsWith('.pdf');
         }
 
+        function setLibraryPdfLoadingState(itemKey, isLoading) {
+            var key = String(itemKey || '');
+            if (!key) return;
+            var row = document.querySelector('#out .list-item[data-item-key="' + key + '"]');
+            if (!row) return;
+            var spinner = row.querySelector('.pdf-loading-spinner');
+            if (!spinner) return;
+            spinner.classList.toggle('is-hidden', !isLoading);
+            spinner.setAttribute('aria-hidden', isLoading ? 'false' : 'true');
+        }
+
         function queueLibraryAttachmentHydration(item, actionContainer) {
             var d = item && item.data ? item.data : {};
             var itemKey = String(d.key || '');
             if (!itemKey) return loadItemAttachments(item, actionContainer);
+            setLibraryPdfLoadingState(itemKey, true);
             if (window.__mnLibraryAttachmentHydrationTasks[itemKey]) return window.__mnLibraryAttachmentHydrationTasks[itemKey];
             var task = loadItemAttachments(item, actionContainer).then(function(updatedEntry) {
                 return updatedEntry || readLibraryEntryPayloadByKey(itemKey);
             }).finally(function() {
                 delete window.__mnLibraryAttachmentHydrationTasks[itemKey];
+                setLibraryPdfLoadingState(itemKey, false);
             });
             window.__mnLibraryAttachmentHydrationTasks[itemKey] = task;
             return task;
@@ -1770,6 +1805,7 @@
             }
             if (listItem) {
                 listItem.setAttribute('data-favorite-entry', encodeURIComponent(JSON.stringify(nextEntry)));
+                updateLibraryActionRow(listItem, d.key, slug, nextEntry.attachmentKey || '');
             }
             if (window.MNFavoritesSet.has(String(d.key || ''))) {
                 upsertFavoriteEntry(nextEntry);
@@ -1859,9 +1895,7 @@
                     var u = (typeof slug !== 'undefined' && slug) ? slug : 'user';
                     var lItem = 'zotero://select/library/items/' + d.key;
                     var cItem = 'https://www.zotero.org/' + u + '/items/' + d.key;
-                    
-                    var btnsHtml = '<a href="' + lItem + '" class="pill pill-zotero">' + T('open_in_zotero') + '</a>';
-                    btnsHtml += '<a href="' + cItem + '" target="_blank" class="pill pill-web">' + T('web') + '</a>';
+                    var btnsHtml = buildLibraryActionRowHtml(d.key, u, '');
                     
                     var addTitle = (d.title || T('Untitled')).replace(/"/g, '"');
                     var author = (d.creators && d.creators[0] && (d.creators[0].lastName || d.creators[0].name)) || T('unknown');
@@ -1880,7 +1914,7 @@
                     itemEl.setAttribute('data-favorite-entry', favoriteEncoded);
                     itemEl.innerHTML = `
                         <div class="list-item-body">
-                            <div class="list-title-row">${favoriteBtnHtml}<div class="list-title">${escapeHtml(addTitle)}</div></div>
+                            <div class="list-title-row">${favoriteBtnHtml}<div class="list-title">${escapeHtml(addTitle)}</div><span class="pdf-loading-spinner" aria-hidden="false"></span></div>
                             <div class="meta-row">
                                 <span>${escapeHtml(author)}</span>
                                 <span>${escapeHtml(d.date || '')}</span>

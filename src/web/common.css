@@ -1132,6 +1132,21 @@ select:focus {
     gap: 8px;
 }
 
+.pdf-loading-spinner {
+    flex-shrink: 0;
+    width: 14px;
+    height: 14px;
+    margin-top: 2px;
+    border: 2px solid var(--sub);
+    border-top-color: transparent;
+    border-radius: 50%;
+    animation: mn-eye-spin 0.7s linear infinite;
+}
+
+.pdf-loading-spinner.is-hidden {
+    display: none;
+}
+
 .favorite-btn {
     width: 24px;
     height: 24px;
