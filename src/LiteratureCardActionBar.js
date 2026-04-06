@@ -25,14 +25,18 @@ var SZLiteratureCardActionBar = class {
       SZLiteratureCardActionBar._removeActionBar(addon);
       return;
     }
-    const selected = SZLiteratureCardActionBar._getSelectedLiteratureNode(targetWindow);
+    const selected = SZLiteratureCardActionBar._getSelectedLiteratureNode(addon, targetWindow);
     if (!selected) {
       SZLiteratureCardActionBar._removeActionBar(addon);
       addon._mnZoteroActionKey = '';
       addon._mnZoteroActionLinkMap = {};
       return;
     }
-    const key = selected.noteId + '|' + selected.links.map((link) => link.type + ':' + link.url).join('|');
+    const key = selected.noteId
+      + '|'
+      + selected.links.map((link) => link.type + ':' + link.url).join('|')
+      + '|metaDocMd5:' + String(selected.cardMetaDocMd5 || '')
+      + '|pdfAttachmentKey:' + String(selected.pdfAttachmentKey || '');
     if (addon._mnZoteroActionKey !== key) {
       SZLiteratureCardActionBar._renderActionBar(addon, selected);
       addon._mnZoteroActionKey = key;
@@ -41,7 +45,7 @@ var SZLiteratureCardActionBar = class {
     }
   }
 
-  static _getSelectedLiteratureNode(context) {
+  static _getSelectedLiteratureNode(addon, context) {
     const studyController = Application.sharedInstance().studyController(context);
     if (!studyController || !studyController.notebookController) return null;
     const nc = studyController.notebookController;
@@ -75,23 +79,31 @@ var SZLiteratureCardActionBar = class {
     const itemKey = SZLiteratureCardActionBar._extractItemKeyFromZoteroUrl(zoteroUrl);
     if (!itemKey) return null;
 
-    if (typeof SZZoteroBridge !== 'undefined' && SZZoteroBridge._getRecordedDocMd5ForItemKey) {
-      const recordedDocMd5 = SZZoteroBridge._getRecordedDocMd5ForItemKey(itemKey);
-      if (recordedDocMd5) {
+    const cardMeta = (typeof SZZoteroBridge !== 'undefined' && SZZoteroBridge._extractCardMetaFromNote)
+      ? SZZoteroBridge._extractCardMetaFromNote(note)
+      : null;
+    const cardMetaDocMd5 = cardMeta && cardMeta.docMd5 ? String(cardMeta.docMd5) : '';
+    const pdfLink = links.find((link) => link && link.type === 'pdf');
+    const pdfAttachmentKey = SZLiteratureCardActionBar._extractAttachmentKeyFromPdfUrl(pdfLink ? pdfLink.url : '');
+    if (cardMetaDocMd5) {
         links.push({
           type: 'open',
           title: '👁',
-          url: 'mnzoterodoc://' + String(recordedDocMd5),
+          url: 'mnzoterodoc://' + String(cardMetaDocMd5),
           color: { r: 0.20, g: 0.20, b: 0.20, a: 1 }
         });
-      }
+    } else if (pdfAttachmentKey && typeof SZZoteroBridge !== 'undefined' && SZZoteroBridge._ensureCardMetaDocMd5Async) {
+      const controller = addon && addon.webController ? addon.webController : null;
+      SZZoteroBridge._ensureCardMetaDocMd5Async(controller, note, pdfAttachmentKey);
     }
 
     return {
       noteId: String(note.noteId),
       nodeView: nodeView,
       itemKey: itemKey,
-      links: links
+      links: links,
+      cardMetaDocMd5: cardMetaDocMd5,
+      pdfAttachmentKey: pdfAttachmentKey
     };
   }
 
@@ -176,6 +188,12 @@ var SZLiteratureCardActionBar = class {
   static _extractItemKeyFromZoteroUrl(url) {
     const str = String(url || '');
     const m = str.match(/zotero:\/\/select\/library\/items(?:\/|\?itemKey=)([^"'\s&\/>]+)/i);
+    return (m && m[1]) ? String(m[1]) : '';
+  }
+
+  static _extractAttachmentKeyFromPdfUrl(url) {
+    const str = String(url || '');
+    const m = str.match(/zotero:\/\/open-pdf\/library\/items\/([^"'\s&\/>]+)/i);
     return (m && m[1]) ? String(m[1]) : '';
   }
 

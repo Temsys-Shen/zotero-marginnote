@@ -840,7 +840,7 @@
             var lItem = 'zotero://select/library/items/' + (data.key || '');
             var cItem = 'https://www.zotero.org/' + (slug || 'user') + '/items/' + (data.key || '');
             var mode = 'C';
-            var createNoteUrl = buildCreateNoteUrl((data.title || T('Untitled')), data.itemType || '', (data.date || '').substring(0, 4), author, lItem, '', cItem, '', data.key || '', mode, uid, key, data, getFieldTemplates());
+            var createNoteUrl = buildCreateNoteUrl((data.title || T('Untitled')), data.itemType || '', (data.date || '').substring(0, 4), author, lItem, '', cItem, '', data.key || '', mode, uid, key, data, getFieldTemplates(), '');
             var q = '';
             if (createNoteUrl.indexOf('?') > -1) q = createNoteUrl.split('?')[1] || '';
             return {
@@ -1246,7 +1246,7 @@
             return html;
         }
 
-        function buildCreateNoteUrl(title, type, year, author, linkZotero, linkPdf, linkWeb, linkCloudPdf, itemKey, mode, uid, apiKey, data, templates) {
+        function buildCreateNoteUrl(title, type, year, author, linkZotero, linkPdf, linkWeb, linkCloudPdf, itemKey, mode, uid, apiKey, data, templates, docMd5) {
             var q = [
                 'title=' + encodeURIComponent(title),
                 'type=' + encodeURIComponent(type || ''),
@@ -1269,6 +1269,7 @@
             if (linkPdf) q.push('lP=' + encodeURIComponent(linkPdf));
             if (linkWeb) q.push('lW=' + encodeURIComponent(linkWeb));
             if (linkCloudPdf) q.push('lC=' + encodeURIComponent(linkCloudPdf));
+            if (docMd5) q.push('docMd5=' + encodeURIComponent(docMd5));
             return 'mnzotero://createNote?' + q.join('&');
         }
 
@@ -1297,7 +1298,8 @@
                 uid,
                 apiKey,
                 d,
-                getFieldTemplates()
+                getFieldTemplates(),
+                payload.docMd5 || ''
             );
         }
 
@@ -1630,7 +1632,12 @@
                         var entry = JSON.parse(decodeURIComponent(encoded));
                         entry.docMd5 = docMd5 ? String(docMd5) : '';
                         entry.attachmentKey = attachmentKey || entry.attachmentKey || '';
+                        var createUrl = buildCreateNoteUrlFromEntry(entry);
+                        entry.createNoteQuery = createUrl.indexOf('?') > -1 ? createUrl.split('?')[1] : '';
                         listItem.setAttribute('data-favorite-entry', encodeURIComponent(JSON.stringify(entry)));
+                        var actionContainer = listItem.querySelector('.list-item-actions');
+                        var addBtn = actionContainer ? actionContainer.querySelector('.add-to-mn-btn:not(.download-pdf-btn)') : null;
+                        if (addBtn) addBtn.href = createUrl;
                         if (itemKey && window.MNFavoritesSet.has(itemKey)) {
                             upsertFavoriteEntry(entry);
                         }
@@ -1712,7 +1719,7 @@
                     var author = (d.creators && d.creators[0] && (d.creators[0].lastName || d.creators[0].name)) || T('unknown');
                     var lItem = 'zotero://select/library/items/' + d.key;
                     var cItem = 'https://www.zotero.org/' + (slug || 'user') + '/items/' + d.key;
-                    var refreshedCreateUrl = buildCreateNoteUrl((d.title || T('Untitled')), d.itemType, (d.date || '').substring(0, 4), author, lItem, links.linkPdf, cItem, links.linkCloudPdf, d.key, 'C', uid, key, d, getFieldTemplates());
+                    var refreshedCreateUrl = buildCreateNoteUrl((d.title || T('Untitled')), d.itemType, (d.date || '').substring(0, 4), author, lItem, links.linkPdf, cItem, links.linkCloudPdf, d.key, 'C', uid, key, d, getFieldTemplates(), '');
                     var addBtn = actionContainer.querySelector('.add-to-mn-btn:not(.download-pdf-btn)');
                     if (addBtn) addBtn.href = refreshedCreateUrl;
 
@@ -1754,7 +1761,7 @@
                 var author = (d.creators && d.creators[0] && (d.creators[0].lastName || d.creators[0].name)) || T('unknown');
                 var lItem = 'zotero://select/library/items/' + d.key;
                 var cItem = 'https://www.zotero.org/' + (slug || 'user') + '/items/' + d.key;
-                var refreshedCreateUrl = buildCreateNoteUrl((d.title || T('Untitled')), d.itemType, (d.date || '').substring(0, 4), author, lItem, links.linkPdf, cItem, links.linkCloudPdf, d.key, 'C', uid, key, d, getFieldTemplates());
+                var refreshedCreateUrl = buildCreateNoteUrl((d.title || T('Untitled')), d.itemType, (d.date || '').substring(0, 4), author, lItem, links.linkPdf, cItem, links.linkCloudPdf, d.key, 'C', uid, key, d, getFieldTemplates(), nextEntry.docMd5 || '');
                 nextEntry.createNoteQuery = refreshedCreateUrl.indexOf('?') > -1 ? refreshedCreateUrl.split('?')[1] : '';
                 if (actionContainer) {
                     var addBtn = actionContainer.querySelector('.add-to-mn-btn:not(.download-pdf-btn)');
@@ -1865,7 +1872,7 @@
                     var favoriteBtnHtml = '<button class="favorite-btn' + (isFavorite ? ' active' : '') + '" data-item-key="' + escapeHtml(String(d.key || '')) + '" data-entry-payload="' + favoriteEncoded + '" title="' + (isFavorite ? T('favorite_remove') : T('favorite_add')) + '">' + (isFavorite ? '★' : '☆') + '</button>';
                     
                     // Add URL is built but PDF URLs are unknown yet
-                    var createNoteUrl = buildCreateNoteUrl((d.title || T('Untitled')), d.itemType, (d.date || '').substring(0, 4), author, lItem, '', cItem, '', d.key, 'C', uid, key, d, fieldTemplates);
+                    var createNoteUrl = buildCreateNoteUrl((d.title || T('Untitled')), d.itemType, (d.date || '').substring(0, 4), author, lItem, '', cItem, '', d.key, 'C', uid, key, d, fieldTemplates, '');
                     
                     var itemEl = document.createElement('div');
                     itemEl.className = 'list-item' + (window.MNLibrarySelectionState.selectedKeys[String(d.key || '')] ? ' is-selected' : '');

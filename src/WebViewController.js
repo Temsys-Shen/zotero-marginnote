@@ -487,6 +487,398 @@ var SZZoteroBridge = class {
     return params;
   }
 
+  static _cardMetaSchema() {
+    return 'mnzotero.card.meta.v1';
+  }
+
+  static _normalizeCardMeta(meta) {
+    const source = (meta && typeof meta === 'object') ? meta : {};
+    return {
+      schema: SZZoteroBridge._cardMetaSchema(),
+      docMd5: source.docMd5 ? String(source.docMd5).trim() : ''
+    };
+  }
+
+  static _buildCardMetaComment(meta) {
+    const payload = SZZoteroBridge._normalizeCardMeta(meta);
+    if (!payload.docMd5) return '';
+    return `<!--mnzotero-card-meta:${JSON.stringify(payload)}-->`;
+  }
+
+  static _parseCardMetaFromRaw(raw) {
+    const html = raw ? String(raw) : '';
+    if (!html) return null;
+    const re = /<!--mnzotero-card-meta:([\s\S]*?)-->/g;
+    let last = null;
+    let m = re.exec(html);
+    while (m) {
+      const rawPayload = m[1] ? String(m[1]).trim() : '';
+      const decodedPayload = rawPayload
+        .replace(/&quot;/g, '"')
+        .replace(/&#34;/g, '"')
+        .replace(/&apos;/g, "'")
+        .replace(/&#39;/g, "'")
+        .replace(/&lt;/g, '<')
+        .replace(/&gt;/g, '>')
+        .replace(/&amp;/g, '&');
+
+      const candidates = [];
+      if (rawPayload) candidates.push(rawPayload);
+      if (decodedPayload && decodedPayload !== rawPayload) candidates.push(decodedPayload);
+
+      let parsed = null;
+      for (let i = 0; i < candidates.length; i++) {
+        const candidate = candidates[i];
+        const firstBrace = candidate.indexOf('{');
+        const lastBrace = candidate.lastIndexOf('}');
+        if (firstBrace === -1 || lastBrace === -1 || lastBrace < firstBrace) continue;
+        const jsonSlice = candidate.substring(firstBrace, lastBrace + 1);
+        try {
+          parsed = JSON.parse(jsonSlice);
+          break;
+        } catch (e) {
+        }
+      }
+
+      if (parsed && parsed.schema === SZZoteroBridge._cardMetaSchema()) {
+        last = SZZoteroBridge._normalizeCardMeta(parsed);
+      } else if (rawPayload) {
+        if (!SZZoteroBridge._cardMetaParseErrorMemo) SZZoteroBridge._cardMetaParseErrorMemo = {};
+        const fingerprint = rawPayload.substring(0, 180);
+        if (!SZZoteroBridge._cardMetaParseErrorMemo[fingerprint]) {
+          SZZoteroBridge._cardMetaParseErrorMemo[fingerprint] = true;
+          console.log('parse card meta failed: invalid payload, snippet=' + fingerprint);
+        }
+      }
+      m = re.exec(html);
+    }
+    return last;
+  }
+
+  static _extractCardMetaFromNote(note) {
+    if (!note || !note.comments) return null;
+    const comments = note.comments;
+    const count = comments.length !== undefined
+      ? comments.length
+      : (typeof comments.count === 'function' ? comments.count() : (comments.count !== undefined ? comments.count : 0));
+    if (!count) return null;
+
+    let latest = null;
+    for (let i = 0; i < count; i++) {
+      const c = comments.objectAtIndex ? comments.objectAtIndex(i) : comments[i];
+      if (!c) continue;
+
+      let html = '';
+      if (c.html !== undefined) {
+        html = (typeof c.html === 'function' ? c.html() : c.html) || '';
+        const parsedFromHtml = SZZoteroBridge._parseCardMetaFromRaw(html);
+        if (parsedFromHtml) latest = parsedFromHtml;
+      }
+
+      let text = '';
+      if (c.text !== undefined) {
+        text = (typeof c.text === 'function' ? c.text() : c.text) || '';
+        const parsedFromText = SZZoteroBridge._parseCardMetaFromRaw(text);
+        if (parsedFromText) latest = parsedFromText;
+      }
+    }
+    return latest;
+  }
+
+  static _buildCardMetaFromCreateParams(params) {
+    const p = (params && typeof params === 'object') ? params : {};
+    const docMd5 = p.docMd5 ? String(p.docMd5).trim() : '';
+    if (!docMd5) return null;
+    return SZZoteroBridge._normalizeCardMeta({ docMd5: docMd5 });
+  }
+
+  static _appendCardMetaCommentToNote(note, meta) {
+    const comment = SZZoteroBridge._buildCardMetaComment(meta);
+    if (!comment) return false;
+    note.appendMarkdownComment(comment);
+    return true;
+  }
+
+  static _composeBodyWithCardMeta(body, meta) {
+    const base = body ? String(body) : '';
+    const marker = SZZoteroBridge._buildCardMetaComment(meta);
+    if (!marker) return base;
+    return base + marker;
+  }
+
+  static _literatureInfoCommentSignature() {
+    return '<style>a{text-decoration:none;font-weight:bolder}.custom-field-row{margin:2px 0}.custom-field-row .custom-field-block{display:inline-block;margin-right:6px}</style><div>';
+  }
+
+  static _isCardMetaRaw(raw) {
+    if (!raw) return false;
+    return String(raw).indexOf('<!--mnzotero-card-meta:') !== -1;
+  }
+
+  static _isPureCardMetaRaw(raw) {
+    if (!SZZoteroBridge._isCardMetaRaw(raw)) return false;
+    const stripped = SZZoteroBridge._stripCardMetaFromRaw(raw).trim();
+    return !stripped;
+  }
+
+  static _collectCardMetaCommentIndices(note) {
+    const indices = [];
+    if (!note || !note.comments) return indices;
+    const comments = note.comments;
+    const count = comments.length !== undefined
+      ? comments.length
+      : (typeof comments.count === 'function' ? comments.count() : (comments.count !== undefined ? comments.count : 0));
+    if (!count) return indices;
+
+    for (let i = 0; i < count; i++) {
+      const c = comments.objectAtIndex ? comments.objectAtIndex(i) : comments[i];
+      if (!c) continue;
+
+      let hit = false;
+      if (c.html !== undefined) {
+        const html = (typeof c.html === 'function' ? c.html() : c.html) || '';
+        if (SZZoteroBridge._isCardMetaRaw(html)) hit = true;
+      }
+      if (!hit && c.text !== undefined) {
+        const text = (typeof c.text === 'function' ? c.text() : c.text) || '';
+        if (SZZoteroBridge._isCardMetaRaw(text)) hit = true;
+      }
+      if (hit) indices.push(i);
+    }
+    return indices;
+  }
+
+  static _extractCommentRaw(comment) {
+    if (!comment) return '';
+    if (comment.text !== undefined) {
+      const text = (typeof comment.text === 'function' ? comment.text() : comment.text) || '';
+      if (text) return String(text);
+    }
+    if (comment.html !== undefined) {
+      const html = (typeof comment.html === 'function' ? comment.html() : comment.html) || '';
+      if (html) return String(html);
+    }
+    return '';
+  }
+
+  static _stripCardMetaFromRaw(raw) {
+    const str = raw ? String(raw) : '';
+    if (!str) return '';
+    return str.replace(/<!--mnzotero-card-meta:[\s\S]*?-->/g, '');
+  }
+
+  static _findPrimaryLiteratureCommentIndex(note) {
+    if (!note || !note.comments) return -1;
+    const comments = note.comments;
+    const count = comments.length !== undefined
+      ? comments.length
+      : (typeof comments.count === 'function' ? comments.count() : (comments.count !== undefined ? comments.count : 0));
+    if (!count) return -1;
+
+    const zoteroItemRe = /zotero:\/\/select\/library\/items(?:\/|\?itemKey=)/i;
+    const signature = SZZoteroBridge._literatureInfoCommentSignature();
+    let signatureIndex = -1;
+    let fallbackIndex = -1;
+    for (let i = 0; i < count; i++) {
+      const c = comments.objectAtIndex ? comments.objectAtIndex(i) : comments[i];
+      if (!c) continue;
+      const raw = SZZoteroBridge._extractCommentRaw(c);
+      if (!raw) continue;
+      if (SZZoteroBridge._isPureCardMetaRaw(raw)) continue;
+      const content = SZZoteroBridge._stripCardMetaFromRaw(raw);
+      if (!content.trim()) continue;
+      if (signatureIndex === -1 && content.indexOf(signature) !== -1 && zoteroItemRe.test(content)) {
+        signatureIndex = i;
+      }
+      if (fallbackIndex === -1) fallbackIndex = i;
+    }
+    if (signatureIndex !== -1) return signatureIndex;
+    for (let i = 0; i < count; i++) {
+      const c = comments.objectAtIndex ? comments.objectAtIndex(i) : comments[i];
+      if (!c) continue;
+      const raw = SZZoteroBridge._extractCommentRaw(c);
+      if (!raw) continue;
+      if (SZZoteroBridge._isPureCardMetaRaw(raw)) continue;
+      const content = SZZoteroBridge._stripCardMetaFromRaw(raw);
+      if (!content.trim()) continue;
+      if (zoteroItemRe.test(content)) return i;
+    }
+    return fallbackIndex;
+  }
+
+  static _rewriteCardMetaInlineOnNote(note, meta, fallbackBody) {
+    if (!note || !note.removeCommentByIndex) return false;
+    const metaMarker = SZZoteroBridge._buildCardMetaComment(meta);
+    if (!metaMarker) return false;
+
+    const primaryIndex = SZZoteroBridge._findPrimaryLiteratureCommentIndex(note);
+    const signature = SZZoteroBridge._literatureInfoCommentSignature();
+    let baseRaw = '';
+    if (primaryIndex >= 0 && note.comments) {
+      const c = note.comments.objectAtIndex ? note.comments.objectAtIndex(primaryIndex) : note.comments[primaryIndex];
+      baseRaw = SZZoteroBridge._extractCommentRaw(c);
+    } else if (fallbackBody) {
+      baseRaw = String(fallbackBody);
+    }
+    baseRaw = SZZoteroBridge._stripCardMetaFromRaw(baseRaw);
+    if (baseRaw && baseRaw.indexOf(signature) === -1) return false;
+    if (!baseRaw) return false;
+
+    const merged = baseRaw + metaMarker;
+    const removeMap = {};
+    const metaIndices = SZZoteroBridge._collectCardMetaCommentIndices(note);
+    metaIndices.forEach((idx) => { removeMap[String(idx)] = true; });
+    if (primaryIndex >= 0) removeMap[String(primaryIndex)] = true;
+
+    const removeIndices = Object.keys(removeMap).map((v) => Number(v)).filter((n) => !isNaN(n)).sort((a, b) => b - a);
+    for (let i = 0; i < removeIndices.length; i++) {
+      note.removeCommentByIndex(removeIndices[i]);
+    }
+    note.appendMarkdownComment(merged);
+    return true;
+  }
+
+  static _extractFilenameFromAttachmentItemPayload(data) {
+    if (data && data.data && data.data.filename) {
+      return String(data.data.filename).trim();
+    }
+    return '';
+  }
+
+  static _fetchAttachmentFilenameByLocalApi(attachmentKey) {
+    const key = attachmentKey ? String(attachmentKey).trim() : '';
+    if (!key) return Promise.resolve('');
+    const url = 'http://localhost:23119/api/users/0/items/' + encodeURIComponent(key);
+    const headers = { 'Zotero-API-Version': '3' };
+    return SZMNNetwork.fetch(url, { method: 'GET', headers: headers }).then((res) => {
+      const data = res.json();
+      return SZZoteroBridge._extractFilenameFromAttachmentItemPayload(data);
+    }, () => '');
+  }
+
+  static _fetchAttachmentFilenameByCloudApi(attachmentKey) {
+    const key = attachmentKey ? String(attachmentKey).trim() : '';
+    if (!key) return Promise.resolve('');
+
+    const defaults = NSUserDefaults.standardUserDefaults();
+    let uid = defaults.objectForKey('mn_zotero_config_uid');
+    uid = uid ? String(uid).trim() : '';
+    if (!uid) return Promise.resolve('');
+
+    let baseUrl = defaults.objectForKey('mn_zotero_config_cloud_api_baseurl');
+    baseUrl = baseUrl ? String(baseUrl).trim() : 'https://api.zotero.org';
+    baseUrl = baseUrl.replace(/\/+$/, '');
+    if (!baseUrl) baseUrl = 'https://api.zotero.org';
+
+    let apiKey = defaults.objectForKey('mn_zotero_config_key');
+    apiKey = apiKey ? String(apiKey).trim() : '';
+
+    const url = baseUrl + '/users/' + encodeURIComponent(uid) + '/items/' + encodeURIComponent(key);
+    const headers = { 'Zotero-API-Version': '3' };
+    if (apiKey) headers['Zotero-API-Key'] = apiKey;
+
+    return SZMNNetwork.fetch(url, { method: 'GET', headers: headers }).then((res) => {
+      const data = res.json();
+      return SZZoteroBridge._extractFilenameFromAttachmentItemPayload(data);
+    }, () => '');
+  }
+
+  static _resolveDocMd5ByAttachmentKey(attachmentKey, filenameHint) {
+    const key = attachmentKey ? String(attachmentKey).trim() : '';
+    if (!key) return Promise.resolve('');
+
+    const hintedName = filenameHint ? String(filenameHint).trim() : '';
+    if (hintedName) {
+      const hintedDocMd5 = SZZoteroBridge._findDocMd5ByFilename(hintedName);
+      return Promise.resolve(hintedDocMd5 ? String(hintedDocMd5).trim() : '');
+    }
+
+    const byPath = SZZoteroBridge._findDocMd5ByAttachmentKeyPath(key);
+    if (byPath) return Promise.resolve(String(byPath).trim());
+
+    return SZZoteroBridge._fetchAttachmentFilenameByLocalApi(key).then((localFilename) => {
+      if (localFilename) {
+        const localDocMd5 = SZZoteroBridge._findDocMd5ByFilename(localFilename);
+        if (localDocMd5) return String(localDocMd5).trim();
+      }
+
+      return SZZoteroBridge._fetchAttachmentFilenameByCloudApi(key).then((cloudFilename) => {
+        if (!cloudFilename) return '';
+        const cloudDocMd5 = SZZoteroBridge._findDocMd5ByFilename(cloudFilename);
+        return cloudDocMd5 ? String(cloudDocMd5).trim() : '';
+      });
+    });
+  }
+
+  static _cardMetaResolvePendingMap() {
+    if (!SZZoteroBridge._cardMetaResolvePending) {
+      SZZoteroBridge._cardMetaResolvePending = {};
+    }
+    return SZZoteroBridge._cardMetaResolvePending;
+  }
+
+  static _updateCardMetaDocMd5OnNote(note, docMd5) {
+    if (!note || !note.noteId) return false;
+    const resolvedDocMd5 = docMd5 ? String(docMd5).trim() : '';
+    if (!resolvedDocMd5) return false;
+
+    const current = SZZoteroBridge._extractCardMetaFromNote(note);
+    const metaIndices = SZZoteroBridge._collectCardMetaCommentIndices(note);
+    const primaryIndex = SZZoteroBridge._findPrimaryLiteratureCommentIndex(note);
+    const commentCount = note && note.comments ? (
+      note.comments.length !== undefined
+        ? note.comments.length
+        : (typeof note.comments.count === 'function' ? note.comments.count() : (note.comments.count !== undefined ? note.comments.count : 0))
+    ) : 0;
+    const isSingleInlineComment = (commentCount === 1 && metaIndices.length === 1 && primaryIndex === 0);
+    if (current && current.docMd5 === resolvedDocMd5 && isSingleInlineComment) return false;
+
+    const topicId = note.notebookId ? String(note.notebookId).trim() : '';
+    if (!topicId) {
+      console.log('update card meta skipped:notebookId missing,noteId=' + String(note.noteId));
+      return false;
+    }
+
+    UndoManager.sharedInstance().undoGrouping("Update Literature Card Metadata", topicId, () => {
+      const rewritten = SZZoteroBridge._rewriteCardMetaInlineOnNote(note, { docMd5: resolvedDocMd5 }, '');
+      if (!rewritten) {
+        console.log('rewrite card meta inline skipped: primary comment not found, noteId=' + String(note.noteId));
+      }
+    });
+    Application.sharedInstance().refreshAfterDBChanged(topicId);
+    return true;
+  }
+
+  static _ensureCardMetaDocMd5Async(controller, note, attachmentKey) {
+    if (!note || !note.noteId) return;
+    const keyStr = attachmentKey ? String(attachmentKey).trim() : '';
+    if (!keyStr) return;
+    const current = SZZoteroBridge._extractCardMetaFromNote(note);
+    if (current && current.docMd5) return;
+
+    const pendingMap = SZZoteroBridge._cardMetaResolvePendingMap();
+    const key = String(note.noteId) + '|' + keyStr;
+    const state = pendingMap[key];
+    const now = Date.now();
+    if (state && state.pending) return;
+    if (state && state.lastMissAt && (now - state.lastMissAt < 5000)) return;
+    pendingMap[key] = { pending: true, lastMissAt: 0 };
+
+    SZZoteroBridge._resolveDocMd5ByAttachmentKey(keyStr).then((resolvedDocMd5) => {
+      if (resolvedDocMd5) {
+        SZZoteroBridge._updateCardMetaDocMd5OnNote(note, resolvedDocMd5);
+        if (controller && controller.addon) controller.addon._mnZoteroActionKey = '';
+        delete pendingMap[key];
+        return;
+      }
+      pendingMap[key] = { pending: false, lastMissAt: Date.now() };
+    }, (err) => {
+      const msg = String((err && err.message) ? err.message : err);
+      console.log('resolve card docMd5 failed: ' + msg + ', noteId=' + String(note.noteId) + ', attachmentKey=' + keyStr);
+      pendingMap[key] = { pending: false, lastMissAt: Date.now() };
+    });
+  }
+
   static _favoritesStorageKey() {
     return 'mn_zotero_favorites_state_v1';
   }
@@ -1080,10 +1472,15 @@ var SZZoteroBridge = class {
 
         const templatesHtml = SZZoteroBridge._getTemplatesHtml(params);
         const body = SZZoteroBridge._buildNoteBody(params, templatesHtml);
-        if (body && createdNote.appendMarkdownComment) {
-          createdNote.appendMarkdownComment(body);
+        const cardMeta = SZZoteroBridge._buildCardMetaFromCreateParams(params);
+        const bodyWithMeta = SZZoteroBridge._composeBodyWithCardMeta(body, cardMeta);
+        if (bodyWithMeta && createdNote.appendMarkdownComment) {
+          createdNote.appendMarkdownComment(bodyWithMeta);
         }
-      } catch (e) { }
+      } catch (e) {
+        const msg = String((e && e.message) ? e.message : e);
+        console.log('createNote failed: ' + msg);
+      }
     });
 
     Application.sharedInstance().refreshAfterDBChanged(topicId);
@@ -1433,26 +1830,10 @@ var SZZoteroBridge = class {
     const attachmentKey = params.attachmentKey ? String(params.attachmentKey) : '';
     if (!attachmentKey) return;
 
-    // Use Local API to get filename (sequential native fetch)
-    const url = 'http://localhost:23119/api/users/0/items/' + encodeURIComponent(attachmentKey);
-    const headers = { 'Zotero-API-Version': '3' };
-
-    SZMNNetwork.fetch(url, { method: 'GET', headers: headers }).then((res) => {
-      const data = res.json();
-      // In Local API, data is { key: "...", data: { filename: "...", ... } }
-      let filename = params.filename ? String(params.filename) : '';
-      if (!filename && data && data.data && data.data.filename) {
-        filename = String(data.data.filename);
-      }
-      
-      if (!filename) {
-        self.webView.evaluateJavaScript('window.onMNDocumentCheck(\'' + attachmentKey + '\', null)', null);
-        return;
-      }
-
-      const docMd5 = SZZoteroBridge._findDocMd5ByFilename(filename);
+    const filenameHint = params.filename ? String(params.filename) : '';
+    SZZoteroBridge._resolveDocMd5ByAttachmentKey(attachmentKey, filenameHint).then((docMd5) => {
       self.webView.evaluateJavaScript('window.onMNDocumentCheck(\'' + attachmentKey + '\', ' + (docMd5 ? ('\'' + docMd5 + '\'') : 'null') + ')', null);
-    }, (err) => {
+    }, () => {
       self.webView.evaluateJavaScript('window.onMNDocumentCheck(\'' + attachmentKey + '\', null)', null);
     });
   }
@@ -1509,6 +1890,29 @@ var SZZoteroBridge = class {
       
       // Precise path match (target filename is a substring of the full path)
       if (pathLower.indexOf(targetLower) !== -1) {
+        return String(doc.docMd5 || '');
+      }
+    }
+    return null;
+  }
+
+  static _findDocMd5ByAttachmentKeyPath(attachmentKey) {
+    const key = attachmentKey ? String(attachmentKey).trim().toLowerCase() : '';
+    if (!key) return null;
+
+    const db = Database.sharedInstance();
+    const docs = db.allDocuments();
+    const count = SZZoteroBridge._getNSArrayCount(docs);
+    if (count === 0) return null;
+
+    const folderNeedle = '/storage/' + key + '/';
+    const slashNeedle = '/' + key + '/';
+    for (let i = 0; i < count; i++) {
+      const doc = SZZoteroBridge._getNSArrayItem(docs, i);
+      if (!doc) continue;
+      const rawPath = String(doc.pathFile || '');
+      const normalizedPath = rawPath.replace(/\\/g, '/').toLowerCase();
+      if (normalizedPath.indexOf(folderNeedle) !== -1 || normalizedPath.indexOf(slashNeedle) !== -1) {
         return String(doc.docMd5 || '');
       }
     }

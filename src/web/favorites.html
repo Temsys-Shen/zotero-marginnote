@@ -124,6 +124,7 @@
             ];
             if (linkPdf) q.push('lP=' + encodeURIComponent(linkPdf));
             if (linkCloudPdf) q.push('lC=' + encodeURIComponent(linkCloudPdf));
+            if (entry && entry.docMd5) q.push('docMd5=' + encodeURIComponent(String(entry.docMd5)));
             return 'mnzotero://createNote?' + q.join('&');
         }
 
@@ -261,7 +262,12 @@
                     var entry = findFavoriteByItemKey(itemKey);
                     if (!entry) return;
                     entry.docMd5 = docMd5;
+                    var createUrl = buildCreateNoteUrl(entry);
+                    entry.createNoteQuery = createUrl.indexOf('?') > -1 ? createUrl.split('?')[1] : '';
                     persistFavoriteEntry(entry);
+                    var itemEl = btn.closest('.list-item');
+                    var addBtn = itemEl ? itemEl.querySelector('.add-to-mn-btn:not(.download-pdf-btn)') : null;
+                    if (addBtn) addBtn.href = createUrl;
                 } else {
                     btn.style.display = 'none';
                 }
@@ -512,9 +518,11 @@
                     entry.hasPdfAnnotations = false;
                     entry.attachmentKey = '';
                     entry.pdfFilename = '';
+                    var createUrlWithoutPdf = buildCreateNoteUrl(entry);
+                    entry.createNoteQuery = createUrlWithoutPdf.indexOf('?') > -1 ? createUrlWithoutPdf.split('?')[1] : '';
                     if (actionContainer) {
                         var emptyAddBtn = actionContainer.querySelector('.add-to-mn-btn:not(.download-pdf-btn)');
-                        if (emptyAddBtn) emptyAddBtn.href = buildCreateNoteUrl(entry);
+                        if (emptyAddBtn) emptyAddBtn.href = createUrlWithoutPdf;
                     }
                     persistFavoriteEntry(entry);
                     return entry;
@@ -549,9 +557,11 @@
                 entry.hasPdfAnnotations = hasAnno;
                 entry.attachmentKey = attachmentKey;
                 entry.pdfFilename = pdfFilename;
+                var createUrlWithPdf = buildCreateNoteUrl(entry);
+                entry.createNoteQuery = createUrlWithPdf.indexOf('?') > -1 ? createUrlWithPdf.split('?')[1] : '';
                 if (actionContainer) {
                     var addBtn = actionContainer.querySelector('.add-to-mn-btn:not(.download-pdf-btn)');
-                    if (addBtn) addBtn.href = buildCreateNoteUrl(entry);
+                    if (addBtn) addBtn.href = createUrlWithPdf;
                 }
                 persistFavoriteEntry(entry);
                 return entry;
