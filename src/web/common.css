@@ -163,6 +163,43 @@ body {
     font-weight: 700;
 }
 
+.settings-section-title-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin-bottom: 10px;
+}
+
+.settings-section-title-row .settings-section-title {
+    margin: 0;
+}
+
+.api-help-icon {
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--sub);
+    font-size: 12px;
+    font-weight: 700;
+    line-height: 18px;
+    text-align: center;
+    cursor: pointer;
+    padding: 0;
+}
+
+.api-help-icon:hover {
+    color: var(--accent);
+    border-color: var(--accent);
+    background: var(--accent-bg);
+}
+
+.api-help-icon:active {
+    opacity: 0.7;
+}
+
 /* 2. 顶部固定区域 */
 header {
     background: var(--surface);

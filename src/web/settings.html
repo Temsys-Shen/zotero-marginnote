@@ -30,7 +30,10 @@
 
             <div class="settings-content">
                 <section id="settings-section-api" class="settings-section">
-                    <h2 class="settings-section-title" id="settings-title-api">API</h2>
+                    <div class="settings-section-title-row">
+                        <h2 class="settings-section-title" id="settings-title-api">API</h2>
+                        <button type="button" id="btn-api-help" class="api-help-icon" aria-label="Open Help Link" title="Open Help Link" onclick="openInsertLinkGuide()">?</button>
+                    </div>
                     <input type="hidden" id="mode" value="C">
                     
                     <div class="status-lights">
@@ -103,6 +106,7 @@
                 <section id="settings-section-onboarding" class="settings-section" style="display:none">
                     <h2 class="settings-section-title" id="settings-title-onboarding">Onboarding</h2>
                     <button id="btn-open-onboarding" class="btn-open-onboarding" onclick="openOnboardingFromSettings()">查看新手引导</button>
+                    <button id="btn-open-insert-link-guide" class="btn-open-onboarding" onclick="openInsertLinkGuide()">查看使用说明</button>
                 </section>
             </div>
         </div>
@@ -111,6 +115,11 @@
     <script src="common.js"></script>
     <script src="onboarding.js"></script>
     <script>
+        var INSERT_LINK_GUIDE_URL = 'https://s.museday.top/zoteromn';
+        function openInsertLinkGuide() {
+            window.location.href = INSERT_LINK_GUIDE_URL;
+        }
+
         // 初始化settings页翻译
         (function initSettingsI18n() {
             var viewOptions = document.querySelectorAll('.view-option');
@@ -136,6 +145,14 @@
 
             var openOnboardingBtn = document.getElementById('btn-open-onboarding');
             if (openOnboardingBtn) openOnboardingBtn.textContent = T('reopen_onboarding');
+            var openGuideBtn = document.getElementById('btn-open-insert-link-guide');
+            if (openGuideBtn) openGuideBtn.textContent = T('insert_link_guide');
+            var apiHelpBtn = document.getElementById('btn-api-help');
+            if (apiHelpBtn) {
+                var ariaLabel = T('open_link_help');
+                apiHelpBtn.setAttribute('aria-label', ariaLabel);
+                apiHelpBtn.setAttribute('title', ariaLabel);
+            }
 
             var checkBtn = document.getElementById('btn-api-check');
             if (checkBtn) checkBtn.textContent = T('check_link');

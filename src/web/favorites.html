@@ -84,6 +84,31 @@
         var tagModalMode = 'edit';
         var touchDragState = null;
 
+        function isCloudConfigReady() {
+            var cfg = window.__mnConfig || {};
+            var uid = String(cfg.uid || '').trim();
+            var key = String(cfg.key || '').trim();
+            return !!uid && !!key;
+        }
+
+        function waitForCloudConfigReady(timeoutMs) {
+            if (isCloudConfigReady()) return Promise.resolve(true);
+            return new Promise(function(resolve) {
+                var start = Date.now();
+                var timer = setInterval(function() {
+                    if (isCloudConfigReady()) {
+                        clearInterval(timer);
+                        resolve(true);
+                        return;
+                    }
+                    if (Date.now() - start >= (timeoutMs || 8000)) {
+                        clearInterval(timer);
+                        resolve(false);
+                    }
+                }, 120);
+            });
+        }
+
         function escapeHtml(text) {
             if (!text && text !== 0) return '';
             return String(text).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -713,6 +738,9 @@
         async function hydrateFavoriteAttachments(entry, actionContainer) {
             var d = entry.snapshot || {};
             if (!entry.itemKey) return;
+            if (!isCloudConfigReady()) {
+                return entry;
+            }
             var uid = entry.uid || ((window.__mnConfig && window.__mnConfig.uid) || '0');
             var apiKey = entry.apiKey || ((window.__mnConfig && window.__mnConfig.key) || '');
             var base = '/users/' + uid;
@@ -747,7 +775,8 @@
                 var eyeBtnHtml = '<button class="open-in-mn-btn loading" data-item-key="' + escapeHtml(String(entry.itemKey)) + '" data-attachment-key="' + escapeHtml(attachmentKey) + '" title="Open in MarginNote"></button>';
                 var liveActionContainer = getFavoriteActionContainerByItemKey(itemKey, actionContainer);
                 actionContainer = liveActionContainer;
-                if (actionContainer && !actionContainer.querySelector('.download-pdf-btn[data-attachment-key="' + escapeHtml(attachmentKey) + '"]')) {
+                var hasExistingDownloadBtn = !!(actionContainer && actionContainer.querySelector('.download-pdf-btn[data-attachment-key="' + escapeHtml(attachmentKey) + '"]'));
+                if (actionContainer && !hasExistingDownloadBtn) {
                     insertActionButtonsBeforeAdd(actionContainer, dlBtnHtml + eyeBtnHtml);
                     layoutActionButtons(actionContainer);
                 }
@@ -974,6 +1003,10 @@
             var opts = options || {};
             var silent = !!opts.silent;
             if (!silent) setStatus(T('favorites_loading'), '');
+            if (!isCloudConfigReady()) {
+                if (!silent) setStatus('Cloud config not ready', 'error');
+                return;
+            }
             var updates = [];
             for (var i = 0; i < favoriteState.items.length; i++) {
                 var entry = favoriteState.items[i];
@@ -1319,6 +1352,11 @@
             initText();
             bindEvents();
             syncBatchOptionState();
+            var cfgReady = await waitForCloudConfigReady(8000);
+            if (!cfgReady) {
+                setStatus('Cloud config not ready', 'error');
+                return;
+            }
             await requestFavoritesList();
             setStatus('', '');
             if (favoriteState.items.length > 0) {
