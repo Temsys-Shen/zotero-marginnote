@@ -36,16 +36,19 @@ class SZMNNetwork {
   static _initRequest(url, options) {
     var fullUrl = url.trim();
     if (fullUrl.indexOf("://") === -1) fullUrl = "https://" + fullUrl;
+    var isLocalZotero = /^https?:\/\/(127\.0\.0\.1|localhost):23119(\/|$)/i.test(fullUrl);
 
     var request = NSMutableURLRequest.requestWithURL(NSURL.URLWithString(fullUrl));
     request.setHTTPMethod(options.method || "GET");
     request.setTimeoutInterval(options.timeout || 10);
 
     var headers = {
-      "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 15_0 like Mac OS X)",
       "Content-Type": "application/json",
       "Accept": "application/json"
     };
+    if (!isLocalZotero) {
+      headers["User-Agent"] = "Mozilla/5.0 (iPhone; CPU iPhone OS 15_0 like Mac OS X)";
+    }
     if (options.headers) {
       for (var k in options.headers) headers[k] = String(options.headers[k]);
     }
